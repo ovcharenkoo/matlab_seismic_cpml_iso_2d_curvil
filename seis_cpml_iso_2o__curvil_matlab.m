@@ -391,7 +391,17 @@
     fprintf('size of the model along X = %.2f\n',(NX - 1) * DELTAX);
     fprintf('size of the model along Y = %.2f\n\n',(NY - 1) * DELTAY);
     fprintf('Total number of grid points = %.2f\n\n',NX * NY);
-
+    
+%--------------------------------------------------------------------------
+%---------Constructing of Curvilinear and Cartesian meshes-----------------
+%--------------------------------------------------------------------------
+if FE_BOUNDARY
+    fprintf('func_curv_jacob started...\n');
+    [ksi,eta, xx,yy,J, Ji] = func_curv_jacob(NX,NY,0,NX*DELTAX, 0, NY*DELTAY,'-(1.25*pi*x/max(x)+0.25*pi)',DELTAX,DELTAY,false);
+    fprintf('func_curv_jacob finished\n\n');
+end
+    
+    
 
 %--- define profile of absorption in PML region ---
 
@@ -577,12 +587,13 @@ end
   end
   
   
-  ymtr=NY*DELTAY;
-  xmtr=NX*DELTAX;
+  ymtr=NY*DELTAY; %ymax [m]
+  xmtr=NX*DELTAX; %xmax [m]
   
   %xdscr=[0:NX]*DELTAX;
   xdscr=linspace(0,xmtr,20*NX);
-  ydscr=-sin(1.25*PI*xdscr/max(xdscr)+0.25*PI);
+  phi=-(1.25*PI*xdscr/max(xdscr)+0.25*PI);
+  ydscr=sin(phi);
   ydscr=ymtr*ydscr/4;
   ydscr=abs(min(ydscr))+ydscr+ymtr/4;
 
@@ -592,7 +603,7 @@ end
         gr_x=zeros(NX+1,NY+1);
         gr_y=zeros(NX+1,NY+1);
 
-        %calculate cartesian grid points
+        %Cartesian grid
         for i=1:NX+1
             for j=1:NY+1
                 gr_x(i,j)=(i-1)*DELTAX;
@@ -711,7 +722,7 @@ end
       %calculate involved grid points, descritized coordinates of curve,
       %normal vectors, coordinates of middles of the descritized samples.
       %All the output variables are vectors
-      [markers, xt_dis, yt_dis, nvec, xmn, ymn] = func_find_closest_grid_nodes(NX,NY,5,gr_x,gr_y ,xdscr, ydscr);
+      [markers, xt_dis, yt_dis, nvec, xmn, ymn] = func_find_closest_grid_nodes(NX,NY,1,gr_x,gr_y ,xdscr, ydscr);
       %[markers, xt_dis, yt_dis, nvec, xmn, ymn] = func_c_find_closest_grid_nodes(NX,NY,1,gr_x,gr_y ,xdscr, ydscr, DELTAX);
       nvecx=nvec*[1 0]';
       nvecy=nvec*[0 1]';

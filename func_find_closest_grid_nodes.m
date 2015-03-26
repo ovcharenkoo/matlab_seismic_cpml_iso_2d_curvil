@@ -38,7 +38,6 @@ for i=1:nx
         y_trial=y_topo(x_trial);
         if ~isempty(find(y_trial<gr_y(i,j+1), 1)) && ~isempty(find(y_trial>gr_y(i,j), 1))
             %fprintf('Involved cell ij point: %d %d\n',i,j);
-
             %set involved grid nodes
             markers(i,j)=1;
             markers(i,j+1)=1;
