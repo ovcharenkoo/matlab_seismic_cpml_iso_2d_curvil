@@ -1,4 +1,4 @@
-%Constructs curvilinear mesh and its Cartesian analogus. Calculates
+%Constructs curvilinear mesh with regular regions for pmls and its Cartesian analogus. Calculates
 %Jacobian 
 % J=[dksi_dx dksi_dy;
 %    deta_dx deta_dy];
@@ -14,38 +14,34 @@
 % dxx - x spacing for Cartesian grid
 % dyy - y spacing for Cartesian grid
 
-function [ksi,eta,xx,yy,J,Ji] = func_curv_jacob(nx,ny,xmin,xmax,ymin,ymax,argument,dxx,dyy,showornot)
-%npml=10;
+function [ksi,eta,xx,yy,J,Ji] = func_curv_jacob_pml(nx,ny,npml,xmin,xmax,ymin,ymax,argument,dxx,dyy,showornot)
 
-%Set rang
-ymid=(ymax+ymin)/2;
+dxxt=xmax/nx;
+dyyt=ymax/ny;
+ymaxr=ymax-2*dyyt*npml;
+ymidr=(ymaxr+ymin)/2;
 
-% dksi=xmax/nx;
-% deta=ymax/ny;
-% ksipmls=dksi*2*npml;
-% etapmls=deta*2*npml;
-% xmax=xmax+ksipmls;
-% ymax=ymax+etapmls;
+xmaxr=xmax-2*npml*dxxt;
+nxr=nx-2*npml;
+nyr=ny-2*npml;
 
-x=linspace(xmin,xmax,nx+1);
+x=linspace(xmin,xmaxr,nxr+1);
 %argument of sin
 %phi=2*pi*x/max(x);
-% phi=-(1.25*pi*x/max(x)+0.25*pi);
-
+%phi=-(1.25*pi*x/max(x)+0.25*pi);
 phi=inline(argument,'x');
 
-
 %Bottom part
-y=0.2*ymax*sin(phi(x));
-y=ymid+y;
+y=0.2*ymaxr*sin(phi(x));
+y=ymidr+y;
 %Top part, shifted by pi to be in phase
-y1=-ymid-0.2*ymax*sin(phi(x)-pi);
+y1=-ymidr-0.2*ymaxr*sin(phi(x)-pi);
 
 %Phys. domain
-ksi=zeros(nx+1,ny+1);
-eta=zeros(nx+1,ny+1);
+ksi=zeros(nxr+1, nyr+1);
+eta=zeros(nxr+1, nyr+1);
 
-%Comp. domain
+% %Comp. domain
 xx=zeros(nx+1,ny+1);
 yy=zeros(nx+1,ny+1);
 % dxx=1.0;
@@ -58,56 +54,43 @@ for i=1:nx+1
     end
 end
 
+
 %Calculate x-ksi in phys domain
-for i=1:nx+1
+for i=1:nxr+1
         ksi(i,:)=x(1,i);
 end
 
-%subplot(2,2,2);
 %cksi=x;  %x in real space
-nyr=round((ny)/2);
-for i=1:ny+1
-    if i<=nyr
-        ceta=(i-1)*y/nyr; %y in real space
+nyro=round(nyr/2);
+for i=1:nyr+1
+    if i<=nyro
+        ceta=(i-1)*y/nyro; %y in real space
         eta(:,i)=ceta(1,:);
-        %plot(cksi,ceta); hold on  %plot horizontal y lines
     else
-        %disp('>');
-        ceta=ymax+(ny-i+1)*y1/(ny-nyr); %y in real space
+        ceta=ymaxr+(nyr-i+1)*y1/(nyr-nyro); %y in real space
         eta(:,i)=ceta(1,:);
-        %plot(cksi,ceta); hold on  %plot horizontal y lines
     end
-%     if i==ny+1 %plot vertical lines for x
-%         for j=1:nx
-%             line([x(j),x(j)],[0,ceta(j)]); hold on
-%         endend
-%     end
 end
 
-% pmln=zeros(npml,ny+2*npml+1);
-% pmls=zeros(npml,ny+2*npml+1);
-% pmlw=zeros(nx+1, npml);
-% pmle=zeros(nx+1, npml);
-% 
-% %fill the pmls with it's coordinates
-% 
-% 
-% %Left and right PMLs
-% ksi=[pmlw ksi pmle];
-% eta=[pmlw eta pmle];
-% 
-% % %Top and bottom PMLs
-%  ksi=[pmls; ksi; pmln];
-%  eta=[pmls; eta; pmln];
+xxt=zeros(nx+1,ny+1);
+yyt=zeros(nx+1,ny+1);
 
-% for i=1:nx+1
-%     for j=1:ny+1
-%         scatter(ksi(i,j),eta(i,j))
-%     end
-% end
+for i=1:nx+1
+    for j=1:ny+1
+        xxt(i,j)=dxxt*(i-1);
+        yyt(i,j)=dyyt*(j-1);
+    end
+end
 
+ksi=(ksi+(dxxt*npml));
+eta=(eta+(dyyt*npml));
+xxt((npml+1):(npml+size(ksi,1)),(npml+1):(npml+size(ksi,2)))=ksi;
+yyt((npml+1):(npml+size(ksi,1)),(npml+1):(npml+size(ksi,2)))=eta;
+
+ksi=xxt;
+eta=yyt;
 %-------------------------------------------------------------------------
-if showornot
+if showornot 
     %Plot Cartesian grid
     subplot(1,2,2)
     title('Cartesian grid')
@@ -120,19 +103,24 @@ if showornot
     end
     line([xx(1,1) xx(end,1)],[max(yy(1,:)) max(yy(1,:))]);
     line([xx(end,1) xx(end,1)],[yy(1,1) yy(1,end)]);
-    %--------------------------------------------------------------------------
+
+    %----------------------------------------------------------
     %Plot curvilinear coordinates
     subplot(1,2,1)
-    %plot grid lines
     for i=1:ny+1
-        plot(ksi(:,i),eta(:,i)); hold on
+        plot(ksi(:,i),eta(:,i)); hold on; %horizontal
     end
     for i=1:nx+1
-        line([ksi(i,1),ksi(i,1)],[0,eta(i,end)]); hold on
+        line([ksi(i,1),ksi(i,1)],[0,eta(i,end)]); hold on; %vertical
     end
     title('Curvilinear grid')
-end
 
+    % for i=1:nx+1
+    %     for j=1:ny+1
+    %         plot(ksi(i,j),eta(i,j),'*'); drawnow; hold on;
+    %     end
+    % end
+end
 %--------------------------------------------------------------------------
 %Derivatives and Jacobian
 J=cell(nx,ny);
@@ -155,3 +143,7 @@ end
 fprintf('Jacobian cell-array %d x %d created\n',size(J,1),size(J,2));
 disp('Finished');
 end
+
+
+
+
