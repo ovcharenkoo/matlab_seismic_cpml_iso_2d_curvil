@@ -151,7 +151,7 @@ for i=2:nx+1
         dy_deta=(yy(i,j)-yy(i,j-1))/(eta(i,j)-eta(i,j-1));
         
         J{i-1,j-1}=[dx_dksi dy_dksi; dx_deta dy_deta];
-        Ji{i-1,j-1}=[dx_dksi dx_deta; dy_dksi dy_deta];
+        Ji{i-1,j-1}=[dksi_dx deta_dx; dksi_dy deta_dy];
 
 %         J(i-1,j-1) =dksi_dx*deta_dy-deta_dx*dksi_dy;
 %         Ji(i-1,j-1)=dx_dksi*dy_deta-dx_deta*dy_dksi;
