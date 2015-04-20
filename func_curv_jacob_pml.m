@@ -14,6 +14,16 @@
 % dxx - x spacing for Cartesian grid
 % dyy - y spacing for Cartesian grid
 
+%Output:
+%ksi - curvilinear x
+%eta - curvilinear y
+
+%xx - cartesian x
+%yy - cartesian y
+
+%To test:
+%[ksi,eta, gr_x,gr_y,J, Ji] = func_curv_jacob_pml(30,30,5,0,100, 0, 100,'-(2*pi*x/max(x)+0.25*pi)',10,10,true)
+
 function [ksi,eta,xx,yy,J,Ji] = func_curv_jacob_pml(nx,ny,npml,xmin,xmax,ymin,ymax,argument,dxx,dyy,showornot)
 
 dxxt=xmax/nx;
@@ -114,30 +124,38 @@ if showornot
         line([ksi(i,1),ksi(i,1)],[0,eta(i,end)]); hold on; %vertical
     end
     title('Curvilinear grid')
-
-    % for i=1:nx+1
-    %     for j=1:ny+1
-    %         plot(ksi(i,j),eta(i,j),'*'); drawnow; hold on;
-    %     end
-    % end
+% 
+%     for i=1:nx+1
+%         for j=1:ny+1
+%             plot(ksi(i,j),eta(i,j),'*'); drawnow; hold on;
+%         end
+%     end
 end
 %--------------------------------------------------------------------------
 %Derivatives and Jacobian
-J=cell(nx,ny);
-Ji=cell(nx,ny);
+ J=cell(nx,ny);
+ Ji=cell(nx,ny);
+% Ji=zeros(nx,ny);
+% J=zeros(nx,ny);
 for i=2:nx+1
     for j=2:ny+1
         dksi_dx=(ksi(i,j)-ksi(i-1,j))/(xx(i,j)-xx(i-1,j));
         dksi_dy=(ksi(i,j)-ksi(i,j-1))/(yy(i,j)-yy(i,j-1));
         deta_dx=(eta(i,j)-eta(i-1,j))/(xx(i,j)-xx(i-1,j));
         deta_dy=(eta(i,j)-eta(i,j-1))/(yy(i,j)-yy(i,j-1));
-        J{i-1,j-1}=[dksi_dx dksi_dy; deta_dx deta_dy];
+         %J{i-1,j-1}=[dksi_dx dksi_dy; deta_dx deta_dy];
         
         dx_dksi=(xx(i,j)-xx(i-1,j))/(ksi(i,j)-ksi(i-1,j));
         dy_dksi=(yy(i,j)-yy(i,j-1))/(ksi(i,j)-ksi(i,j-1));
         dx_deta=(xx(i,j)-xx(i-1,j))/(eta(i,j)-eta(i-1,j));
         dy_deta=(yy(i,j)-yy(i,j-1))/(eta(i,j)-eta(i,j-1));
+        
+        J{i-1,j-1}=[dx_dksi dy_dksi; dx_deta dy_deta];
         Ji{i-1,j-1}=[dx_dksi dx_deta; dy_dksi dy_deta];
+
+%         J(i-1,j-1) =dksi_dx*deta_dy-deta_dx*dksi_dy;
+%         Ji(i-1,j-1)=dx_dksi*dy_deta-dx_deta*dy_dksi;
+        
     end
 end
 fprintf('Jacobian cell-array %d x %d created\n',size(J,1),size(J,2));

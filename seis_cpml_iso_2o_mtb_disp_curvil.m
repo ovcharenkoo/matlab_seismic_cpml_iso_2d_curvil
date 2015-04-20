@@ -1,4 +1,4 @@
-%
+%                   Curvilinear coordinates + FE_B + disp form
 % SEISMIC_CPML Version 1.1.1, November 2009.
 %
 % Copyright Universite de Pau et des Pays de l'Adour, CNRS and INRIA, France.
@@ -151,22 +151,8 @@
 % total number of grid points in each direction of the grid
 
 %Fine
- NX =282;  %X
- NY =141;  %Y
- 
- %NX=621;
- %NY=342;
- 
- %NX=121;
- %NY=102;
- 
-%Rough, but not so bad
- %NX=86;
- %NY=42;
-
-%Very rough
-%NX=43;
-%NY=21;
+ NX =200;  %X
+ NY =100;  %Y
  
 
 %--------------------------------------------------------------------------
@@ -176,17 +162,17 @@
     snapshot_time=150;
 
 %Use explosive source or gaussian?
-    EXPLOSIVE_SOURCE=true;
+    EXPLOSIVE_SOURCE=false;
     
 %Show source position on the graph?
     SHOW_SOURCE_POSITION=true;
 
 %Pause a little bit each iteration
    PAUSE_ON=false;
-   pause_time=0.01; %[sec]
+   pause_time=0.1; %[sec]
    
 % To show or don't show wavefield 
-  SAVE_VX_JPG =false;
+  SAVE_VX_JPG =false; %doesn't work, because I didn't pay attention to it yet
   SAVE_VY_JPG =true;
 
 %Record video - corresponding SAVE_VX or VY must be turned on
@@ -200,41 +186,40 @@
   %Position of flat horizontal free surface
   NFS = NY-round(NY/2)+round(NY/3);
   
-%Apply flat Flat elastic boundary
-  FE_BOUNDARY=true;
+% flags to add PML layers to the edges of the grid
+  USE_PML_XMIN = false;
+  USE_PML_XMAX = false;
+  USE_PML_YMIN = false;
+  USE_PML_YMAX = false;
+  
+  DISP_NORM=true;
+  VEL_NORM=false;
+  
+  DATA_TO_BINARY_FILE=false;
+  tag='mz_';
+  %varname = @(x) inputname(1);
+  
+  RED_BLUE=false;
+  COLORBAR_ON=true;
+  eps=0.001;
+  
+  %Apply flat Flat elastic boundary
   cp_above_eb=1800.d0;
   cp_below_eb=3300.d0;
   rho_above_eb=2400.d0;
   rho_below_eb=3200.d0;
-  
-% flags to add PML layers to the edges of the grid
-  USE_PML_XMIN = true;
-  USE_PML_XMAX = true;
-  USE_PML_YMIN = true;
-  USE_PML_YMAX = true;
-  
-  
-  
 %--------------------------------------------------------------------------
 %--------------------------------------------------------------------------
   
   %Check if it is possible to save video
-  if SAVE_VY_JPG
-    fig_vy=figure;
-  else
-      %to get rid of errors that can occur
+  if MAKE_MOVIE_VY && ~SAVE_VY_JPG
       disp('Error. It is necesary to have SAVE_VY_JPG=true.');
       MAKE_MOVIE_VY=false;
   end
-  
-  if SAVE_VX_JPG
-    fig_vx=figure;
-  else
-      %to get rid of errors that can occur
+  if MAKE_MOVIE_VX && ~SAVE_VX_JPG
       disp('Error. It is necesary to have SAVE_VX_JPG=true.');
       MAKE_MOVIE_VX=false;
   end
-  
 
  % size of a grid cell
  DELTAX = 10.d0;	%[m]
@@ -257,10 +242,10 @@
  NSTEP = 500;
 
 % time step in seconds
-  DELTAT = 2.d-3;	%[sec]
+  DELTAT = 1.d-3;	%[sec]
 
 % parameters for the source
-  f0 = 20.d0;
+  f0 = 10.d0;
   t0 = 1.20d0 / f0;
   factor = 1.d7;
 
@@ -282,7 +267,7 @@
   yfin =  300.d0;           % last receiver y in meters
 
 % display information on the screen from time to time
-  IT_DISPLAY = 5;
+  IT_DISPLAY = 10;
 
 % value of PI
   PI = 3.141592653589793238462643d0;
@@ -300,17 +285,24 @@
   STABILITY_THRESHOLD = 1.d+25;
 
 % main arrays
-  vx=zeros(NX,NY);
-  vy=zeros(NX,NY);
-  sigmaxx=zeros(NX,NY);
-  sigmayy=zeros(NX,NY);
-  sigmaxy=zeros(NX,NY);
+%displacements over X and Y
+  ux=zeros(NX,NY);
+  uy=zeros(NX,NY);
+% variables that save wavefield at two previous time steps
+  uxnm1=zeros(NX,NY);
+  uynm1=zeros(NX,NY);
+  uxnm2=zeros(NX,NY);
+  uynm2=zeros(NX,NY);
+  velx=zeros(NX,NY);
+  vely=zeros(NX,NY);
+
+%elastic parameters
   lambda=zeros(NX,NY);
   mu=zeros(NX,NY);
   rho=zeros(NX,NY);
 
-  total_energy_kinetic=zeros(NSTEP);
-  total_energy_potential=zeros(NSTEP);
+%   total_energy_kinetic=zeros(NSTEP);
+%   total_energy_potential=zeros(NSTEP);
 
 % power to compute d0 profile
   NPOWER = 2.d0;
@@ -320,15 +312,10 @@
 
 % arrays for the memory variables
 % could declare these arrays in PML only to save a lot of memory, but proof of concept only here
-  memory_dvx_dx=zeros(NX,NY);
-  memory_dvx_dy=zeros(NX,NY);
-  memory_dvy_dx=zeros(NX,NY);
-  memory_dvy_dy=zeros(NX,NY);
-  memory_dsigmaxx_dx=zeros(NX,NY);
-  memory_dsigmayy_dy=zeros(NX,NY);
-  memory_dsigmaxy_dx=zeros(NX,NY);
-  memory_dsigmaxy_dy=zeros(NX,NY);
-
+  memory_dux_dxx=zeros(NX,NY);
+  memory_duy_dyy=zeros(NX,NY);
+  memory_dux_dxy=zeros(NX,NY);
+  memory_duy_dxy=zeros(NX,NY);
 
  % 1D arrays for the damping profiles
  d_x=zeros(NX,1);
@@ -336,22 +323,12 @@
  alpha_x=zeros(NX,1);
  a_x=zeros(NX,1);
  b_x=zeros(NX,1);
- d_x_half=zeros(NX,1);
- K_x_half=zeros(NX,1);
- alpha_x_half=zeros(NX,1);
- a_x_half=zeros(NX,1);
- b_x_half=zeros(NX,1);
 
  d_y=zeros(NY,1);
  K_y=zeros(NY,1);
  alpha_y=zeros(NY,1);
  a_y=zeros(NY,1);
  b_y=zeros(NY,1);
- d_y_half=zeros(NY,1);
- K_y_half=zeros(NY,1);
- alpha_y_half=zeros(NY,1);
- a_y_half=zeros(NY,1);
- b_y_half=zeros(NY,1);
 
  % for receivers
  ix_rec=zeros(NREC,1);
@@ -362,8 +339,6 @@
  % for seismograms
  sisvx=zeros(NSTEP,NREC);
  sisvy=zeros(NSTEP,NREC);
-
- %character(len=100) :: filename
  
    %Initiate video object for vx
   if MAKE_MOVIE_VX
@@ -384,36 +359,13 @@
  %----------------------------------------
 
     fprintf('2D elastic finite-difference code in velocity and stress formulation with C-PML\n\n');
-    
-    %  display size of the model
     fprintf('NX = %d\n',NX);
     fprintf('NY = %d\n\n',NY);
     fprintf('size of the model along X = %.2f\n',(NX - 1) * DELTAX);
     fprintf('size of the model along Y = %.2f\n\n',(NY - 1) * DELTAY);
     fprintf('Total number of grid points = %.2f\n\n',NX * NY);
-    
-%--------------------------------------------------------------------------
-%---------Constructing of Curvilinear and Cartesian meshes-----------------
-%--------------------------------------------------------------------------
-if FE_BOUNDARY
-    fprintf('func_curv_jacob started...\n');
-    sphi='-(1.25*pi*x/max(x)+0.25*pi)'; %sting argument for curved interface
-    %Generate regular sparse mesh 
-    [ksi,eta, gr_x,gr_y,J, Ji] = func_curv_jacob_pml(NX,NY,NPOINTS_PML,0,NX*DELTAX, 0, NY*DELTAY,sphi,DELTAX,DELTAY,false);
-    Jc=cell2mat(J); %convert from cell array to matrix
-    Jic=cell2mat(Ji);%same for inversed jacobian
-    %Generate dense mesh for calculating of derivatives in points that do
-    %not coincide with original grid
-    [ksid,etad, xxd,yyd,Jd, Jid] = func_curv_jacob_pml(2*NX,2*NY,2*NPOINTS_PML,0,NX*DELTAX, 0, NY*DELTAY,sphi,DELTAX,DELTAY,false);
-    Jcd=cell2mat(Jd); %convert from cell array to matrix
-    Jicd=cell2mat(Jid);%same for inversed jacobian
-    fprintf('func_curv_jacob finished\n\n');
-end
-    
-    
 
 %--- define profile of absorption in PML region ---
-
 % thickness of the PML layer in meters
   thickness_PML_x = NPOINTS_PML * DELTAX;
   thickness_PML_y = NPOINTS_PML * DELTAY;
@@ -435,22 +387,14 @@ end
   fprintf('d0_y = %.2f\n\n',d0_y);
 
   d_x(:) = ZERO;
-  d_x_half(:) = ZERO;
   K_x(:) = 1.d0;
-  K_x_half(:) = 1.d0;
   alpha_x(:) = ZERO;
-  alpha_x_half(:) = ZERO;
   a_x(:) = ZERO;
-  a_x_half(:) = ZERO;
 
   d_y(:) = ZERO;
-  d_y_half(:) = ZERO;
   K_y(:) = 1.d0;
-  K_y_half(:) = 1.d0;
   alpha_y(:) = ZERO;
-  alpha_y_half(:) = ZERO;
   a_y(:) = ZERO;
-  a_y_half(:) = ZERO;
   %break;
 %--------------------------------------------------------------------------
 % damping in the X direction
@@ -473,15 +417,6 @@ for i = 1:NX
             K_x(i) = 1.d0 + (K_MAX_PML - 1.d0) * abscissa_normalized^NPOWER;
             alpha_x(i) = ALPHA_MAX_PML * (1.d0 - abscissa_normalized) + 0.1d0 * ALPHA_MAX_PML;
         end
-        % define damping profile at half the grid points
-        abscissa_in_PML = xoriginleft - (xval + DELTAX/2.d0);
-        if(abscissa_in_PML >= ZERO)
-            abscissa_normalized = abscissa_in_PML / thickness_PML_x;
-            d_x_half(i) = d0_x * abscissa_normalized^NPOWER;
-            % this taken from Gedney page 8.2
-            K_x_half(i) = 1.d0 + (K_MAX_PML - 1.d0) * abscissa_normalized^NPOWER;
-            alpha_x_half(i) = ALPHA_MAX_PML * (1.d0 - abscissa_normalized) + 0.1d0 * ALPHA_MAX_PML;
-        end
     end
 
 %---------- right edge
@@ -495,36 +430,20 @@ for i = 1:NX
             K_x(i) = 1.d0 + (K_MAX_PML - 1.d0) * abscissa_normalized^NPOWER;
             alpha_x(i) = ALPHA_MAX_PML * (1.d0 - abscissa_normalized) + 0.1d0 * ALPHA_MAX_PML;
         end
-
-        % define damping profile at half the grid points
-        abscissa_in_PML = xval + DELTAX/2.d0 - xoriginright;
-        if(abscissa_in_PML >= ZERO)
-            abscissa_normalized = abscissa_in_PML / thickness_PML_x;
-            d_x_half(i) = d0_x * abscissa_normalized^NPOWER;
-            % this taken from Gedney page 8.2
-            K_x_half(i) = 1.d0 + (K_MAX_PML - 1.d0) * abscissa_normalized^NPOWER;
-            alpha_x_half(i) = ALPHA_MAX_PML * (1.d0 - abscissa_normalized) + 0.1d0 * ALPHA_MAX_PML;
-        end
    end
 
     % just in case, for -5 at the end
     if(alpha_x(i) < ZERO) 
         alpha_x(i) = ZERO;
     end
-    if(alpha_x_half(i) < ZERO) 
-        alpha_x_half(i) = ZERO;
-    end
-    b_x(i) = exp(- (d_x(i) / K_x(i) + alpha_x(i)) * DELTAT);
-    b_x_half(i) = exp(- (d_x_half(i) / K_x_half(i) + alpha_x_half(i)) * DELTAT);
 
+    b_x(i) = exp(- (d_x(i) / K_x(i) + alpha_x(i)) * DELTAT);
+  
     % this to avoid division by zero outside the PML
     if(abs(d_x(i)) > 1.d-6) 
         a_x(i) = d_x(i) * (b_x(i) - 1.d0) / (K_x(i) * (d_x(i) + K_x(i) * alpha_x(i)));
     end    
-    if(abs(d_x_half(i)) > 1.d-6) 
-        a_x_half(i)=d_x_half(i)*(b_x_half(i) - 1.d0) / (K_x_half(i) * (d_x_half(i) + K_x_half(i) * alpha_x_half(i)));
-    end
-end
+  end
 
 %--------------------------------------------------------------------------
 % damping in the Y direction
@@ -547,16 +466,6 @@ end
         K_y(j) = 1.d0 + (K_MAX_PML - 1.d0) * abscissa_normalized^NPOWER;
         alpha_y(j) = ALPHA_MAX_PML * (1.d0 - abscissa_normalized) + 0.1d0 * ALPHA_MAX_PML;
       end
-
-      % define damping profile at half the grid points
-      abscissa_in_PML = yoriginbottom - (yval + DELTAY/2.d0);
-      if(abscissa_in_PML >= ZERO)
-        abscissa_normalized = abscissa_in_PML / thickness_PML_y;
-        d_y_half(j) = d0_y * abscissa_normalized^NPOWER;
-        % this taken from Gedney page 8.2
-        K_y_half(j) = 1.d0 + (K_MAX_PML - 1.d0) * abscissa_normalized^NPOWER;
-        alpha_y_half(j) = ALPHA_MAX_PML * (1.d0 - abscissa_normalized) + 0.1d0 * ALPHA_MAX_PML;
-      end
     end
 
 %---------- top edge
@@ -570,120 +479,56 @@ end
         K_y(j) = 1.d0 + (K_MAX_PML - 1.d0) * abscissa_normalized^NPOWER;
         alpha_y(j) = ALPHA_MAX_PML * (1.d0 - abscissa_normalized) + 0.1d0 * ALPHA_MAX_PML;
       end
-
-      % define damping profile at half the grid points
-      abscissa_in_PML = yval + DELTAY/2.d0 - yorigintop;
-      if(abscissa_in_PML >= ZERO)
-        abscissa_normalized = abscissa_in_PML / thickness_PML_y;
-        d_y_half(j) = d0_y * abscissa_normalized^NPOWER;
-        % this taken from Gedney page 8.2
-        K_y_half(j) = 1.d0 + (K_MAX_PML - 1.d0) * abscissa_normalized^NPOWER;
-        alpha_y_half(j) = ALPHA_MAX_PML * (1.d0 - abscissa_normalized) + 0.1d0 * ALPHA_MAX_PML;
-      end
     end
 
     b_y(j) = exp(- (d_y(j) / K_y(j) + alpha_y(j)) * DELTAT);
-    b_y_half(j) = exp(- (d_y_half(j) / K_y_half(j) + alpha_y_half(j)) * DELTAT);
-
+    
     % this to avoid division by zero outside the PML
     if(abs(d_y(j)) > 1.d-6) 
         a_y(j) = d_y(j) * (b_y(j) - 1.d0) / (K_y(j) * (d_y(j) + K_y(j) * alpha_y(j)));
     end  
-    
-    if(abs(d_y_half(j)) > 1.d-6) 
-        a_y_half(j) = d_y_half(j)*(b_y_half(j) - 1.d0) / (K_y_half(j) * (d_y_half(j) + K_y_half(j) * alpha_y_half(j)));
-    end 
   end
-  
-  
-  ymtr=NY*DELTAY; %ymax [m]
-  xmtr=NX*DELTAX; %xmax [m]
-  %phi='-(1.25*PI*xdscr/max(xdscr)+0.25*PI)';
-  phi=inline(sphi,'x');
-  %xdscr=[0:NX]*DELTAX;
-  xdscr=linspace(0,xmtr,20*NX);
-  ydscr=sin(phi(xdscr));
-  ydscr=ymtr*ydscr/4;
-  ydscr=abs(min(ydscr))+ydscr+ymtr/4;
 
-  %------------------------------------------------------------------------
-%   if FE_BOUNDARY
-%         %grid point coordinates in physical domain
-%         gr_x=zeros(NX+1,NY+1);
-%         gr_y=zeros(NX+1,NY+1);
-% 
-%         %Cartesian grid
-%         for i=1:NX+1
-%             for j=1:NY+1
-%                 gr_x(i,j)=(i-1)*DELTAX;
-%                 gr_y(i,j)=(j-1)*DELTAY;    
-%             end    
-%         end
-%   end 
+  fprintf('func_curv_jacob started...\n');
+  sphi='-(1.25*pi*x/max(x)+0.25*pi)'; %sting argument for curved interface
+  %Generate regular sparse mesh 
+  [ksi,eta, gr_x,gr_y,J, Ji] = func_curv_jacob_pml(NX,NY,NPOINTS_PML,0,NX*DELTAX, 0, NY*DELTAY,sphi,DELTAX,DELTAY,false);
+    
+  % Dense grid
+  [ksid,etad, xxd,yyd,Jd, Jid] = func_curv_jacob_pml(2*NX,2*NY,2*NPOINTS_PML,0,NX*DELTAX, 0, NY*DELTAY,sphi,DELTAX,DELTAY,false);
+  fprintf('func_curv_jacob finished\n\n');
   
-  % compute the Lame parameters and density
-
+  %Lithological boundary
+  x_fe=ksi(:,round(1+NY/2));
+  y_fe=eta(:,round(1+NY/2));
+  
+  nice_matrix=zeros(i,j);
   for j = 1:NY
-    y_trial=j*DELTAY;
     for i = 1:NX
-        x_trial = i*DELTAX;
-        rho(i,j) = density;
-        mu(i,j) = density*cs*cs;
-        lambda(i,j) = density*(cp*cp - 2.d0*cs*cs);
-        %If we use flast elastic inner boundary
-        
-        if FE_BOUNDARY
-            temp_dn=round(length(ydscr)/NX); %-number of topography points in dx sample
-            if y_trial>=ydscr(1,i*temp_dn)
-                 rho(i,j) = rho_above_eb;
-                 cp = cp_above_eb;	%[km/s]
-                 cs = cp / 1.732d0;	%[km/s]
-                 lambda(i,j) =density*(cp*cp - 2.d0*cs*cs);
-                 mu(i,j) = density*cs*cs;
-            else
-                 rho(i,j) = rho_below_eb;
-                 cp = cp_below_eb;	%[km/s]
-                 cs = cp / 1.732d0;	%[km/s]
-                 lambda(i,j) =density*(cp*cp - 2.d0*cs*cs);
-                 mu(i,j) = density*cs*cs;
-            end
+        x_trial =ksi(i,j);
+        y_trial =eta(i,j);    
+        if y_trial>=y_fe;
+             rho(i,j) = rho_above_eb;
+             density=rho_above_eb;
+             cp = cp_above_eb;	%[m/s]
+             cs = cp / 1.732d0;	%[m/s]
+             lambda(i,j) =density*(cp*cp - 2.d0*cs*cs);
+             mu(i,j) = density*cs*cs;
+             nice_matrix(i,j)=1;
+        else
+             %fprintf('b\n');
+             rho(i,j) = rho_below_eb;
+             density=rho_below_eb;
+             cp = cp_below_eb;	%[m/s]
+             cs = cp / 1.732d0;	%[m/s]
+             lambda(i,j) =density*(cp*cp - 2.d0*cs*cs);
+             mu(i,j) = density*cs*cs;
+             nice_matrix(i,j)=ZERO;
         end
     end
   end
-  
-% % Create Cijkl matrix
-% fprintf('\nStart Cijkl');
-% if FE_BOUNDARY
-%     order=2;
-%     cijkla=zeros(order,order,order,order);
-%     cijklb=zeros(order,order,order,order);
-%     densitya = rho_above_eb;
-%     cpa = cp_above_eb;	%[km/s]
-%     csa = cp / 1.732d0;	%[km/s]
-%     lambdaa =density*(cp*cp - 2.d0*cs*cs);
-%     mua = density*cs*cs;
-%     densityb = rho_below_eb;
-%     cpb = cp_below_eb;	%[km/s]
-%     csb = cp / 1.732d0;	%[km/s]
-%     lambdab =density*(cp*cp - 2.d0*cs*cs);
-%     mub = density*cs*cs;
-%     for i=1:order
-%         for j=1:order
-%             for k=1:order
-%                 for l=1:order
-%                      cijkla(i,j,k,l)=lambdaa*dkr(i,j)*dkr(k,l)+mua*(dkr(i,k)*dkr(j,l)+dkr(i,l)*dkr(j,k));
-%                      cijklb(i,j,k,l)=lambdab*dkr(i,j)*dkr(k,l)+mub*(dkr(i,k)*dkr(j,l)+dkr(i,l)*dkr(j,k));
-%                      fprintf('.');
-%                 end
-%             end
-%             fprintf('\n');
-%         end
-%     end
-%     clearvars densitya cpa csa lambdaa mua densityb cpb csb lambdab mub;
-%     fprintf('Cijkl dim %d created\n',order);
-% end
-%------------------------------------------------------------------------
-  
+
+
   % print position of the source
    fprintf('Position of the source:\n');
    fprintf('x = %.2f\n',xsource);
@@ -726,45 +571,36 @@ end
       disp('time step is too large, simulation will be unstable');
       break;
   end
-  
-  %if FE_BOUNDARY
-      %calculate involved grid points, descritized coordinates of curve,
-      %normal vectors, coordinates of middles of the descritized samples.
-      %All the output variables are vectors
-      %[markers, xt_dis, yt_dis, nvec, xmn, ymn] = func_find_closest_grid_nodes(NX,NY,1,gr_x,gr_y ,xdscr, ydscr);
-      %[markers, xt_dis, yt_dis, nvec, xmn, ymn] = func_c_find_closest_grid_nodes(NX,NY,1,gr_x,gr_y ,xdscr, ydscr, DELTAX);
-      %nvecx=nvec*[1 0]';
-      %nvecy=nvec*[0 1]';
-  %end
 
 %--------------------------------------------------------------------------
 % initialize arrays
-  vx(:,:) = ZERO;
-  vy(:,:) = ZERO;
-  sigmaxx(:,:) = ZERO;
-  sigmayy(:,:) = ZERO;
-  sigmaxy(:,:) = ZERO;
+  ux(:,:) = ZERO;
+  uy(:,:) = ZERO;
+    
+
+% arrays for 2 previous time steps
+  uxnm1(:,:)=ZERO;
+  uxnm2(:,:)=ZERO;
+  uynm1(:,:)=ZERO;
+  uynm2(:,:)=ZERO;
+  
+  velx(:,:)=ZERO;
+  vely(:,:)=ZERO;
 
 % PML
-  memory_dvx_dx(:,:) = ZERO;
-  memory_dvx_dy(:,:) = ZERO;
-  memory_dvy_dx(:,:) = ZERO;
-  memory_dvy_dy(:,:) = ZERO;
-  memory_dsigmaxx_dx(:,:) = ZERO;
-  memory_dsigmayy_dy(:,:) = ZERO;
-  memory_dsigmaxy_dx(:,:) = ZERO;
-  memory_dsigmaxy_dy(:,:) = ZERO;
-  memory_dsigmayy_dx(:,:) = ZERO;
+  memory_dux_dxx(:,:) = ZERO;
+  memory_duy_dyy(:,:) = ZERO;
+  memory_duy_dxy(:,:) = ZERO;
+  memory_dux_dxy(:,:) = ZERO;
 
 % initialize seismograms
   sisvx(:,:) = ZERO;
   sisvy(:,:) = ZERO;
 
-% initialize total energy
-  total_energy_kinetic(:) = ZERO;
-  total_energy_potential(:) = ZERO;
+% % initialize total energy
+%   total_energy_kinetic(:) = ZERO;
+%   total_energy_potential(:) = ZERO;
 
-  input('Press Enter to start time loop ...');
     
   %Set red-blue colormap for images
   CMAP=zeros(256,3);
@@ -778,166 +614,108 @@ end
 	  c=(1-f^2)*c2+f^2*c3;
 	  CMAP(128+nc,:)=c;
 	end
-  colormap(CMAP);
+  if RED_BLUE
+      colormap(CMAP);
+  end
   set(gca,'YDir','normal');
+  
+  
+  
+  input('Press Enter to start time loop ...');
 %---------------------------------
 %---  beginning of time loop -----
 %---------------------------------
   for it = 1:NSTEP
-%------------------------------------------------------------
-% compute stress sigma and update memory variables for C-PML
-%------------------------------------------------------------
-        for j = 2:NY
-            for i = 1:NX-1
-              % interpolate material parameters at the right location in the staggered grid cell
-              lambda_half_x = 0.5d0 * (lambda(i+1,j) + lambda(i,j));
-              mu_half_x = 0.5d0 * (mu(i+1,j) + mu(i,j));
-              lambda_plus_two_mu_half_x = lambda_half_x + 2.d0 * mu_half_x;
+    ux(:,:)=ZERO;
+    uy(:,:)=ZERO;
+        for j = 2:NY-1
+            for i = 2:NX-1  
+              lambdav = lambda(i,j);
+              muv =  mu(i,j);
+              rhov=rho(i,j);
+              lambda_plus_two_mu = lambdav + 2.d0 * muv;
+              lambda_plus_mu = lambdav + muv;
+              
+              %Derivatives from 4th lecture Introduction to CFD
+              value_dux_dxx = (uxnm1(i-1,j) -2*uxnm1(i,j)+ uxnm1(i+1,j)) / (DELTAX^2);
+              value_duy_dxx = (uynm1(i-1,j) -2*uynm1(i,j)+ uynm1(i+1,j)) / (DELTAX^2);
+              
+              value_duy_dyy = (uynm1(i,j-1) -2*uynm1(i,j)+ uynm1(i,j+1)) / (DELTAY^2);
+              value_dux_dyy = (uxnm1(i,j-1) -2*uxnm1(i,j)+ uxnm1(i,j+1)) / (DELTAY^2);
+              
+              value_dux_dxy=(uxnm1(i+1,j+1)-uxnm1(i+1,j-1)-uxnm1(i-1,j+1)+uxnm1(i-1,j-1))/(4*DELTAX*DELTAY);
+              value_duy_dxy=(uynm1(i+1,j+1)-uynm1(i+1,j-1)-uynm1(i-1,j+1)+uynm1(i-1,j-1))/(4*DELTAX*DELTAY);
 
-              value_dvx_dx = (vx(i+1,j) - vx(i,j)) / DELTAX;
-              value_dvy_dy = (vy(i,j) - vy(i,j-1)) / DELTAY;
+%               memory_dux_dxx(i,j) = b_x(i) * memory_dux_dxx(i,j) + a_x(i) * value_dux_dxx;
+%               memory_duy_dyy(i,j) = b_y(j) * memory_duy_dyy(i,j) + a_y(j) * value_duy_dyy;
+% 
+%               value_dux_dxx = value_dux_dxx / K_x(i) + memory_dux_dxx(i,j);
+%               value_duy_dyy = value_duy_dyy / K_y(j) + memory_duy_dyy(i,j);
+                   
+                          %Modelling Seismic Wave Propagation for Geophysical Imaging(Virieux, Etienne et al.)
+                  ux(i,j) = 2*uxnm1(i,j)-uxnm2(i,j) + ...
+                     (lambda_plus_two_mu*value_dux_dxx + lambda_plus_mu*value_duy_dxy+muv*value_dux_dyy) * (DELTAT^2)/rhov;
 
-              memory_dvx_dx(i,j) = b_x_half(i) * memory_dvx_dx(i,j) + a_x_half(i) * value_dvx_dx;
-              memory_dvy_dy(i,j) = b_y(j) * memory_dvy_dy(i,j) + a_y(j) * value_dvy_dy;
-
-              value_dvx_dx = value_dvx_dx / K_x_half(i) + memory_dvx_dx(i,j);
-              value_dvy_dy = value_dvy_dy / K_y(j) + memory_dvy_dy(i,j);
-
-              sigmaxx(i,j) = sigmaxx(i,j) + ...
-                 (lambda_plus_two_mu_half_x * value_dvx_dx + lambda_half_x * value_dvy_dy) * DELTAT;
-
-              sigmayy(i,j) = sigmayy(i,j) + ...
-                 (lambda_half_x * value_dvx_dx + lambda_plus_two_mu_half_x * value_dvy_dy) * DELTAT;
-               %--------------------------------------------------------------------------------------------------
-               if(FREE_SURFACE)
-                    if(j==NFS+1)
-                        sigmayy(i,j)=-sigmayy(i,j-1);
-                        sigmaxx(i,j)=ZERO;
-                    end
-               end    
-               %--------------------------------------------------------------------------------------------------
-            end 
-        end
-    
-
-    for j = 1:NY-1
-        for i = 2:NX
-              % interpolate material parameters at the right location in the staggered grid cell
-              mu_half_y = 0.5d0 * (mu(i,j+1) + mu(i,j));
-
-              value_dvy_dx = (vy(i,j) - vy(i-1,j)) / DELTAX;
-              value_dvx_dy = (vx(i,j+1) - vx(i,j)) / DELTAY;
-
-              memory_dvy_dx(i,j) = b_x(i) * memory_dvy_dx(i,j) + a_x(i) * value_dvy_dx;
-              memory_dvx_dy(i,j) = b_y_half(j) * memory_dvx_dy(i,j) + a_y_half(j) * value_dvx_dy;
-
-              value_dvy_dx = value_dvy_dx / K_x(i) + memory_dvy_dx(i,j);
-              value_dvx_dy = value_dvx_dy / K_y_half(j) + memory_dvx_dy(i,j);
-
-              sigmaxy(i,j) = sigmaxy(i,j) + mu_half_y * (value_dvy_dx + value_dvx_dy) * DELTAT;
-       end
-    end
-    if(FREE_SURFACE)
-        sigmaxy(:,NFS)=ZERO;
-    end
-
-    %--------------------------------------------------------
-    % compute velocity and update memory variables for C-PML
-    %--------------------------------------------------------
-
-    for j = 2:NY
-        for i = 2:NX
-              value_dsigmaxx_dx = (sigmaxx(i,j) - sigmaxx(i-1,j)) / DELTAX;
-              value_dsigmaxy_dy = (sigmaxy(i,j) - sigmaxy(i,j-1)) / DELTAY;
-
-              memory_dsigmaxx_dx(i,j) = b_x(i) * memory_dsigmaxx_dx(i,j) + a_x(i) * value_dsigmaxx_dx;
-              memory_dsigmaxy_dy(i,j) = b_y(j) * memory_dsigmaxy_dy(i,j) + a_y(j) * value_dsigmaxy_dy;
-
-              value_dsigmaxx_dx = value_dsigmaxx_dx / K_x(i) + memory_dsigmaxx_dx(i,j);
-              value_dsigmaxy_dy = value_dsigmaxy_dy / K_y(j) + memory_dsigmaxy_dy(i,j);
-
-              vx(i,j) = vx(i,j) + (value_dsigmaxx_dx + value_dsigmaxy_dy) * DELTAT / rho(i,j);
-        end
-    end
-
-    for j = 1:NY-1
-        for i = 1:NX-1
-          % interpolate density at the right location in the staggered grid cell
-          rho_half_x_half_y = 0.25d0 * (rho(i,j) + rho(i+1,j) + rho(i+1,j+1) + rho(i,j+1));
-          
-          value_dsigmaxy_dx = (sigmaxy(i+1,j) - sigmaxy(i,j)) / DELTAX;
-          value_dsigmayy_dy = (sigmayy(i,j+1) - sigmayy(i,j)) / DELTAY;
-       
-          memory_dsigmaxy_dx(i,j) = b_x_half(i) * memory_dsigmaxy_dx(i,j) + a_x_half(i) * value_dsigmaxy_dx;
-          memory_dsigmayy_dy(i,j) = b_y_half(j) * memory_dsigmayy_dy(i,j) + a_y_half(j) * value_dsigmayy_dy;
-
-          value_dsigmaxy_dx = value_dsigmaxy_dx / K_x_half(i) + memory_dsigmaxy_dx(i,j);
-          value_dsigmayy_dy = value_dsigmayy_dy / K_y_half(j) + memory_dsigmayy_dy(i,j);  
-
-          vy(i,j) = vy(i,j) + (value_dsigmaxy_dx + value_dsigmayy_dy) * DELTAT / rho_half_x_half_y;
-        end
-        if(FREE_SURFACE)
-            if(j==NFS)
-                sigmayy(:,NFS+1)=ZERO; %Once mirrored sigmayy(:,NFS+1) was used, we have to set it equal to zero
-            end                              % to get rid of artificial values above the free surface
-        end
-    end
-
+                  uy(i,j) = 2*uynm1(i,j)-uynm2(i,j) + ...
+                     (lambda_plus_two_mu*value_duy_dyy + lambda_plus_mu*value_dux_dxy+muv*value_duy_dxx) * (DELTAT^2)/rhov;
+ 
+               if VEL_NORM
+                velx(i,j)=(ux(i,j)-uxnm2(i,j))/(2*DELTAT);
+                vely(i,j)=(uy(i,j)-uynm2(i,j))/(2*DELTAT);
+               end
+              
+             end
+         end
     % add the source (force vector located at a given grid point)
     a = pi*pi*f0*f0;
     t = double(it-1)*DELTAT;
-
     % Gaussian
      %source_term = factor * exp(-a*(t-t0)^2);
-
-     %source_term = factor * (t-t0);
-    
+     %source_term = factor * (t-t0);  
      % first derivative of a Gaussian
-        source_term =  -factor*2.d0*a*(t-t0)*exp(-a*(t-t0)^2);
-    
-
+     %   source_term =  -factor*2.d0*a*(t-t0)*exp(-a*(t-t0)^2);
     % Ricker source time function (second derivative of a Gaussian)
-     %source_term = factor * (1.d0 - 2.d0*a*(t-t0)^2)*exp(-a*(t-t0)^2);
+     source_term = factor * (1.d0 - 2.d0*a*(t-t0)^2)*exp(-a*(t-t0)^2);
 
     force_x = sin(ANGLE_FORCE * DEGREES_TO_RADIANS) * source_term;
     force_y = cos(ANGLE_FORCE * DEGREES_TO_RADIANS) * source_term;
+%       force_x=factor * (1.d0 - 2.d0*a*(t-t0)^2)*exp(-a*(t-t0)^2);
+%       force_y=factor * (1.d0 - 2.d0*a*(t-t0)^2)*exp(-a*(t-t0)^2);
 
     % define location of the source
     i = ISOURCE;
     j = JSOURCE;
 
-    % interpolate density at the right location in the staggered grid cell
-    rho_half_x_half_y = 0.25d0 * (rho(i,j) + rho(i+1,j) + rho(i+1,j+1) + rho(i,j+1));
-    
-    if EXPLOSIVE_SOURCE
-        source_term = factor * (1.d0 - 2.d0*a*(t-t0)^2)*exp(-a*(t-t0)^2);
-        force_x = source_term;
-        force_y = source_term;
-        sigmaxx(i,j)=sigmaxx(i,j)+force_x;
-        sigmayy(i,j)=sigmayy(i,j)+force_y;
-    else
-        vx(i,j) = vx(i,j) + force_x * DELTAT / rho(i,j);
-        vy(i,j) = vy(i,j) + force_y * DELTAT / rho_half_x_half_y;
-    end
-    
+    ux(i,j) = ux(i,j) + force_x * DELTAT / rho(i,j);
+    uy(i,j) = uy(i,j) + force_y * DELTAT / rho(i,j);
+ 
     % Dirichlet conditions (rigid boundaries) on the edges or at the bottom of the PML layers
-    vx(1,:) = ZERO;
-    vx(NX,:) = ZERO;
+    ux(1,:) = ZERO;
+    ux(NX,:) = ZERO;
 
-    vx(:,1) = ZERO;
-    vx(:,NY) = ZERO;
+    ux(:,1) = ZERO;
+    ux(:,NY) = ZERO;
 
-    vy(1,:) = ZERO;
-    vy(NX,:) = ZERO;
+    uy(1,:) = ZERO;
+    uy(NX,:) = ZERO;
 
-    vy(:,1) = ZERO;
-    vy(:,NY) = ZERO;
+    uy(:,1) = ZERO;
+    uy(:,NY) = ZERO;
 
     % store seismograms
     for irec = 1:NREC
-        sisvx(it,irec) = vx(ix_rec(irec),iy_rec(irec));
-        sisvy(it,irec) = vy(ix_rec(irec),iy_rec(irec));
-    end
+        sisvx(it,irec) = ux(ix_rec(irec),iy_rec(irec));
+        sisvy(it,irec) = uy(ix_rec(irec),iy_rec(irec));
+    end   
+    
+    
+    %Set previous timesteps
+    uxnm2=uxnm1;
+    uxnm1=ux;
+    
+    uynm2=uynm1;
+    uynm1=uy;
+
 
     % compute total energy in the medium (without the PML layers)
 
@@ -953,23 +731,23 @@ end
     % add potential energy, defined as 1/2 epsilon_ij sigma_ij
     % in principle we should interpolate the medium parameters at the right lo thencation
     % in the staggered grid cell but in a homogeneous medium we can safely ignore it
-    total_energy_potential(it) = ZERO;
-    for j = NPOINTS_PML+1: NY-NPOINTS_PML
-        for i = NPOINTS_PML+1: NX-NPOINTS_PML
-            epsilon_xx = ((lambda(i,j) + 2.d0*mu(i,j)) * sigmaxx(i,j) - lambda(i,j) * ...
-                sigmayy(i,j)) / (4.d0 * mu(i,j) * (lambda(i,j) + mu(i,j)));
-            epsilon_yy = ((lambda(i,j) + 2.d0*mu(i,j)) * sigmayy(i,j) - lambda(i,j) * ...
-                sigmaxx(i,j)) / (4.d0 * mu(i,j) * (lambda(i,j) + mu(i,j)));
-            epsilon_xy = sigmaxy(i,j) / (2.d0 * mu(i,j));
-            total_energy_potential(it) = total_energy_potential(it) + ...
-                0.5d0 * (epsilon_xx * sigmaxx(i,j) + epsilon_yy * sigmayy(i,j) + 2.d0 * epsilon_xy * sigmaxy(i,j));
-        end
-    end
+%     total_energy_potential(it) = ZERO;
+%     for j = NPOINTS_PML+1: NY-NPOINTS_PML
+%         for i = NPOINTS_PML+1: NX-NPOINTS_PML
+%             epsilon_xx = ((lambda(i,j) + 2.d0*mu(i,j)) * sigmaxx(i,j) - lambda(i,j) * ...
+%                 sigmayy(i,j)) / (4.d0 * mu(i,j) * (lambda(i,j) + mu(i,j)));
+%             epsilon_yy = ((lambda(i,j) + 2.d0*mu(i,j)) * sigmayy(i,j) - lambda(i,j) * ...
+%                 sigmaxx(i,j)) / (4.d0 * mu(i,j) * (lambda(i,j) + mu(i,j)));
+%             epsilon_xy = sigmaxy(i,j) / (2.d0 * mu(i,j));
+%             total_energy_potential(it) = total_energy_potential(it) + ...
+%                 0.5d0 * (epsilon_xx * sigmaxx(i,j) .+ epsilon_yy * sigmayy(i,j) + 2.d0 * epsilon_xy * sigmaxy(i,j));
+%         end
+%     end
 
     % output information
     if(mod(it,IT_DISPLAY) == 0 || it == 5) 
         % print maximum of norm of velocity
-        velocnorm = max(sqrt(vx.^2 + vy.^2));
+        velocnorm = max(sqrt(ux.^2 + uy.^2));
         fprintf('Time step: %d\n',it)
         fprintf('Time: %.2f seconds\n',single((it-1)*DELTAT));
         %fprintf('Max norm velocity vector V (m/s) = %.2f\n',velocnorm);
@@ -980,48 +758,40 @@ end
             break 
             disp('code became unstable and blew up');
         end    
-
-        if(SAVE_VX_JPG)
-            clf;
-            %fig_vx=figure;
-            imagesc(nx_vec,ny_vec,vy');
-            colorbar();
-            xlabel('m');
-            ylabel('m');
-            %fig_vx_name=['Snapshot Vx. t= ' num2str(it) 'sec'];
-            %set(fig_vx,'Name',fig_vx_name); % - set name of a figure
-            %set(fig_vx,'NumberTitle','off'); %- hide "Figure #" in name of figure
-            set(gca,'YDir','normal');
-            drawnow;
-            if MAKE_MOVIE_VX
-                F_x=getframe(gcf);  %-  capture figure or use gcf to get current figure. Or get current
-                writeVideo(vidObj_vx,F_x);  %- add frame to the movie
-                fprintf('Frame for %s captured\n',movie_name_vx);
-            end
-        end
-        
     
-        if(SAVE_VY_JPG)
+        if(SAVE_VX_JPG || SAVE_VY_JPG)
             clf;	%clear current frame
-            %fig_vy=figure;
- 
-            imagesc(nx_vec,ny_vec,vy'); 
+            if DISP_NORM
+                u=sqrt(ux.^2+uy.^2);
+            elseif VEL_NORM
+                u=sqrt((velx/max(max(velx))).^2+(vely/max(max(vely))).^2);
+            else
+                if SAVE_VX_JPG 
+                    u=ux; 
+                elseif SAVE_VY_JPG
+                    u=uy;
+                end
+            end
+            %velnorm(ISOURCE-1:ISOURCE+1,JSOURCE-1:JSOURCE+1)=ZERO;
+            imagesc(nx_vec,ny_vec,u');
+            title(['Step = ',num2str(it),' Time: ',num2str(single((it-1)*DELTAT)),' sec']); 
             xlabel('m');
             ylabel('m');
             set(gca,'YDir','normal');
-            drawnow; hold on;
-            
-            if FE_BOUNDARY
-                plot(xdscr,ydscr); 
-                xlabel('m');
-                ylabel('m');
-                set(gca,'YDir','normal');
-                drawnow;
+            if COLORBAR_ON
+                colorbar();
             end
+            drawnow; hold on;
             
             if SHOW_SOURCE_POSITION
                 scatter(xsource, ysource,'g','filled'); drawnow;
             end
+            
+            plot(x_fe,y_fe); 
+            xlabel('m');
+            ylabel('m');
+            set(gca,'YDir','normal');
+            drawnow;
            
             if SNAPSHOT
                 if it==snapshot_time
@@ -1035,20 +805,24 @@ end
                 end  
             end
             
-            %input('Next');
-            
-
             if MAKE_MOVIE_VY
                 F_y=getframe(gcf);  %-  capture figure or use gcf to get current figure. Or get current
                 writeVideo(vidObj_vy,F_y);  %- add frame to the movie
                 fprintf('Frame for %s captured\n',movie_name_vy);
+            end
+            
+            if DATA_TO_BINARY_FILE
+                filename=[tag 'u_' 'disp_t_' num2str(it) '.txt'];
+                dlmwrite(filename, u);
+                fprintf('Data file %s saved to %s\n',filename, pwd);
             end
         end
         fprintf('\n'); 
     end
     if PAUSE_ON
         pause(pause_time);
-    end
+    end                    
+                    
   end
   % end of time loop
   
