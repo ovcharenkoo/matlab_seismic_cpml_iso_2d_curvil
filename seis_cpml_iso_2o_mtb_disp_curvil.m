@@ -40,29 +40,6 @@
 
 % Dimitri Komatitsch, University of Pau, France, April 2007.
 
-% The second-order staggered-grid formulation of Madariaga (1976) and Virieux (1986) is used:
-%
-%            ^ y
-%            |
-%            |
-%
-%            +-------------------+
-%            |                   |
-%            |                   |
-%            |                   |
-%            |                   |
-%            |        v_y        |
-%   sigma_xy +---------+         |
-%            |         |         |
-%            |         |         |
-%            |         |         |
-%            |         |         |
-%            |         |         |
-%            +---------+---------+  ---> x
-%           v_x    sigma_xx
-%                  sigma_yy
-%
-
 % The C-PML implementation is based in part on formulas given in Roden and Gedney (2000).
 % If you use this code for your own research, please cite some (or all) of these
 % articles:
@@ -151,8 +128,8 @@
 % total number of grid points in each direction of the grid
 
 %Fine
- NX =200;  %X
- NY =100;  %Y
+ NX =100;  %X
+ NY =50;  %Y
  
 
 %--------------------------------------------------------------------------
@@ -391,7 +368,7 @@
   alpha_x(:) = ZERO;
   a_x(:) = ZERO;
 
-  d_y(:) = ZERO;
+  d_y(:) = ZERO;set(gca,'YDir','normal');
   K_y(:) = 1.d0;
   alpha_y(:) = ZERO;
   a_y(:) = ZERO;
@@ -492,22 +469,24 @@ for i = 1:NX
   fprintf('func_curv_jacob started...\n');
   sphi='-(1.25*pi*x/max(x)+0.25*pi)'; %sting argument for curved interface
   %Generate regular sparse mesh 
-  [ksi,eta, gr_x,gr_y,J, Ji] = func_curv_jacob_pml(NX,NY,NPOINTS_PML,0,NX*DELTAX, 0, NY*DELTAY,sphi,DELTAX,DELTAY,false);
-    
-  % Dense grid
-  [ksid,etad, xxd,yyd,Jd, Jid] = func_curv_jacob_pml(2*NX,2*NY,2*NPOINTS_PML,0,NX*DELTAX, 0, NY*DELTAY,sphi,DELTAX,DELTAY,false);
+  [xx,yy, ksi, eta,J] = func_curv_jacob_pml(NX,NY,NPOINTS_PML,0,NX*DELTAX, 0, NY*DELTAY,sphi,DELTAX,DELTAY, 0.1,false);
   fprintf('func_curv_jacob finished\n\n');
+  [xx2,yy2, ksi2, eta2,J2] = func_curv_jacob_pml(2*NX,2*NY,2*NPOINTS_PML,0,NX*DELTAX, 0, NY*DELTAY,sphi,DELTAX,DELTAY, 0.1 ,false);
+  fprintf('Dense func_curv_jacob finished\n\n');
+%   % Dense grid
+%   [ksid,etad, xxd,yyd,Jd, Jid] = func_curv_jacob_pml(2*NX,2*NY,2*NPOINTS_PML,0,NX*DELTAX, 0, NY*DELTAY,sphi,DELTAX,DELTAY,false);
+%   fprintf('func_curv_jacob finished\n\n');
   
   %Lithological boundary
-  x_fe=ksi(:,round(1+NY/2));
-  y_fe=eta(:,round(1+NY/2));
-  
+  x_fe=xx(:,round(NY/2));
+  y_fe=yy(:,round(NY/2));
+
   nice_matrix=zeros(i,j);
-  for j = 1:NY
-    for i = 1:NX
-        x_trial =ksi(i,j);
-        y_trial =eta(i,j);    
-        if y_trial>=y_fe;
+  for i = 1:NX+1
+    for j = 1:NY+1
+        x_trial =xx(i,j);
+        y_trial =yy(i,j);    
+        if y_trial>=y_fe(i)
              rho(i,j) = rho_above_eb;
              density=rho_above_eb;
              cp = cp_above_eb;	%[m/s]
@@ -525,6 +504,12 @@ for i = 1:NX
              mu(i,j) = density*cs*cs;
              nice_matrix(i,j)=ZERO;
         end
+%         if (j<(round(NY/2)+2)) && (j>(round(NY/2)-2))
+%         pcolor(nice_matrix');
+%         colorbar();
+%         title(['i=' num2str(i) ' j=' num2str(j) ' xx=' num2str(x_trial) ' yy=' num2str(y_trial) ' y_fe=' num2str(y_fe(i))]);
+%         input('Next?');
+%         end
     end
   end
 
@@ -619,7 +604,13 @@ for i = 1:NX
   end
   set(gca,'YDir','normal');
   
-  
+%   dx=DELTAX;
+%   dz=DELTAY;
+%   oper=create_oper_for_derivatives_from_taylor(1.d0,1.d0);
+  value_dux_dx=ZERO;
+  value_dux_dy=ZERO;
+  value_duy_dx=ZERO;
+  value_duy_dy=ZERO;  
   
   input('Press Enter to start time loop ...');
 %---------------------------------
@@ -636,6 +627,24 @@ for i = 1:NX
               lambda_plus_two_mu = lambdav + 2.d0 * muv;
               lambda_plus_mu = lambdav + muv;
               
+%               nine_points=[uxnm1(i+1,j+1); uxnm1(i+1,j); uxnm1(i+1,j-1); uxnm1(i,j+1); uxnm1(i,j); uxnm1(i,j-1); uxnm1(i-1,j+1); uxnm1(i-1,j); uxnm1(i-1,j-1)];
+%               UInm1x=oper*nine_points;
+%               
+%               nine_points=[uynm1(i+1,j+1); uynm1(i+1,j); uynm1(i+1,j-1); uynm1(i,j+1); uynm1(i,j); uynm1(i,j-1); uynm1(i-1,j+1); uynm1(i-1,j); uynm1(i-1,j-1)];
+%               UInm1y=oper*nine_points;
+%               value_dux_dxx=UInm1x(4)/DELTAX^2.d0;
+%               value_dux_dyy=UInm1x(5)/DELTAY^2.d0;
+%               value_dux_dxy=UInm1x(6)/(4*DELTAX*DELTAY);
+%               
+%               value_duy_dxx=UInm1y(4)/DELTAX^2.d0;
+%               value_duy_dyy=UInm1y(5)/DELTAY^2.d0;
+%               value_duy_dxy=UInm1y(6)/(4*DELTAX*DELTAY);
+              Jt=J{i,j};
+              dksi_dy=Jt(1,1);
+              deta_dy=Jt(1,2);
+              dksi_dx=Jt(2,1);
+              deta_dx=Jt(2,2);
+
               %Derivatives from 4th lecture Introduction to CFD
               value_dux_dxx = (uxnm1(i-1,j) -2*uxnm1(i,j)+ uxnm1(i+1,j)) / (DELTAX^2);
               value_duy_dxx = (uynm1(i-1,j) -2*uynm1(i,j)+ uynm1(i+1,j)) / (DELTAX^2);
@@ -645,14 +654,29 @@ for i = 1:NX
               
               value_dux_dxy=(uxnm1(i+1,j+1)-uxnm1(i+1,j-1)-uxnm1(i-1,j+1)+uxnm1(i-1,j-1))/(4*DELTAX*DELTAY);
               value_duy_dxy=(uynm1(i+1,j+1)-uynm1(i+1,j-1)-uynm1(i-1,j+1)+uynm1(i-1,j-1))/(4*DELTAX*DELTAY);
-
+              
+              Jacobiano=[dksi_dx deta_dx 0 0 0;...
+                      dksi_dy deta_dy 0 0 0;...
+                      0 0 dksi_dx^2.d0 deta_dx^2.d0 2.d0*dksi_dx*deta_dx;...
+                      0 0 dksi_dy^2.d0 deta_dy^2.d0 2.d0*dksi_dy*deta_dy;...
+                      0 0 dksi_dx*dksi_dy deta_dx*deta_dy deta_dx*dksi_dy+dksi_dx*deta_dy];
+              
+              UInm1x=Jacobiano*[value_dux_dx;value_dux_dy;value_dux_dxx;value_dux_dyy;value_dux_dxy];
+              UInm1y=Jacobiano*[value_duy_dx;value_duy_dy;value_duy_dxx;value_duy_dyy;value_duy_dxy];
+              value_dux_dxx=UInm1x(3);
+              value_dux_dyy=UInm1x(4);
+              value_dux_dxy=UInm1x(5);
+              
+              value_duy_dxx=UInm1y(3);
+              value_duy_dyy=UInm1y(4);
+              value_duy_dxy=UInm1y(5);
 %               memory_dux_dxx(i,j) = b_x(i) * memory_dux_dxx(i,j) + a_x(i) * value_dux_dxx;
 %               memory_duy_dyy(i,j) = b_y(j) * memory_duy_dyy(i,j) + a_y(j) * value_duy_dyy;
 % 
 %               value_dux_dxx = value_dux_dxx / K_x(i) + memory_dux_dxx(i,j);
 %               value_duy_dyy = value_duy_dyy / K_y(j) + memory_duy_dyy(i,j);
                    
-                          %Modelling Seismic Wave Propagation for Geophysical Imaging(Virieux, Etienne et al.)
+              %Modelling Seismic Wave Propagation for Geophysical Imaging(Virieux, Etienne et al.)
                   ux(i,j) = 2*uxnm1(i,j)-uxnm2(i,j) + ...
                      (lambda_plus_two_mu*value_dux_dxx + lambda_plus_mu*value_duy_dxy+muv*value_dux_dyy) * (DELTAT^2)/rhov;
 
@@ -787,7 +811,7 @@ for i = 1:NX
                 scatter(xsource, ysource,'g','filled'); drawnow;
             end
             
-            plot(x_fe,y_fe); 
+            plot(x_fe,y_fe,'m'); 
             xlabel('m');
             ylabel('m');
             set(gca,'YDir','normal');
