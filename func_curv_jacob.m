@@ -14,7 +14,7 @@
 % dxx - x spacing for Cartesian grid
 % dyy - y spacing for Cartesian grid
 
-function [ksi,eta,xx,yy,J,Ji] = func_curv_jacob(nx,ny,xmin,xmax,ymin,ymax,argument,dxx,dyy,showornot)
+function [xx,yy,ksi,eta,J] = func_curv_jacob(nx,ny,xmin,xmax,ymin,ymax,argument,dxx,dyy,curvature,showornot)
 %npml=10;
 
 %Set rang
@@ -36,31 +36,31 @@ phi=inline(argument,'x');
 
 
 %Bottom part
-y=0.2*ymax*sin(phi(x));
+y=curvature*ymax*sin(phi(x));
 y=ymid+y;
 %Top part, shifted by pi to be in phase
-y1=-ymid-0.2*ymax*sin(phi(x)-pi);
+y1=-ymid-curvature*ymax*sin(phi(x)-pi);
 
 %Phys. domain
-ksi=zeros(nx+1,ny+1);
-eta=zeros(nx+1,ny+1);
-
-%Comp. domain
 xx=zeros(nx+1,ny+1);
 yy=zeros(nx+1,ny+1);
+
+%Comp. domain
+ksi=zeros(nx+1,ny+1);
+eta=zeros(nx+1,ny+1);
 % dxx=1.0;
 % dyy=1.0;
 
 for i=1:nx+1
     for j=1:ny+1
-        xx(i,j)=dxx*(i-1);
-        yy(i,j)=dyy*(j-1);
+        ksi(i,j)=dxx*(i-1);
+        eta(i,j)=dyy*(j-1);
     end
 end
 
 %Calculate x-ksi in phys domain
 for i=1:nx+1
-        ksi(i,:)=x(1,i);
+        xx(i,:)=x(1,i);
 end
 
 %subplot(2,2,2);
@@ -69,12 +69,12 @@ nyr=round((ny)/2);
 for i=1:ny+1
     if i<=nyr
         ceta=(i-1)*y/nyr; %y in real space
-        eta(:,i)=ceta(1,:);
+        yy(:,i)=ceta(1,:);
         %plot(cksi,ceta); hold on  %plot horizontal y lines
     else
         %disp('>');
         ceta=ymax+(ny-i+1)*y1/(ny-nyr); %y in real space
-        eta(:,i)=ceta(1,:);
+        yy(:,i)=ceta(1,:);
         %plot(cksi,ceta); hold on  %plot horizontal y lines
     end
 %     if i==ny+1 %plot vertical lines for x
@@ -114,21 +114,21 @@ if showornot
     %plot grid lines
     for i=2:nx+1
         for j=2:ny+1
-            line([xx(i-1,j-1) xx(i-1,j-1)],[yy(i-1,j-1) yy(i-1,j)]); hold on; %vertical
-            line([xx(i-1,j-1) xx(i,j-1)],[yy(i-1,j-1) yy(i-1,j-1)]); hold on; %horizontal
+            line([ksi(i-1,j-1) ksi(i-1,j-1)],[eta(i-1,j-1) eta(i-1,j)]); hold on; %vertical
+            line([ksi(i-1,j-1) ksi(i,j-1)],[eta(i-1,j-1) eta(i-1,j-1)]); hold on; %horizontal
         end
     end
-    line([xx(1,1) xx(end,1)],[max(yy(1,:)) max(yy(1,:))]);
-    line([xx(end,1) xx(end,1)],[yy(1,1) yy(1,end)]);
+    line([ksi(1,1) ksi(end,1)],[max(eta(1,:)) max(eta(1,:))]);
+    line([ksi(end,1) ksi(end,1)],[eta(1,1) eta(1,end)]);
     %--------------------------------------------------------------------------
     %Plot curvilinear coordinates
     subplot(1,2,1)
     %plot grid lines
     for i=1:ny+1
-        plot(ksi(:,i),eta(:,i)); hold on
+        plot(xx(:,i),yy(:,i)); hold on
     end
     for i=1:nx+1
-        line([ksi(i,1),ksi(i,1)],[0,eta(i,end)]); hold on
+        line([xx(i,1), xx(i,1)],[0, yy(i,end)]); hold on
     end
     title('Curvilinear grid')
 end
@@ -136,20 +136,20 @@ end
 %--------------------------------------------------------------------------
 %Derivatives and Jacobian
 J=cell(nx,ny);
-Ji=cell(nx,ny);
-for i=2:nx+1
-    for j=2:ny+1
-        dksi_dx=(ksi(i,j)-ksi(i-1,j))/(xx(i,j)-xx(i-1,j));
-        dksi_dy=(ksi(i,j)-ksi(i,j-1))/(yy(i,j)-yy(i,j-1));
-        deta_dx=(eta(i,j)-eta(i-1,j))/(xx(i,j)-xx(i-1,j));
-        deta_dy=(eta(i,j)-eta(i,j-1))/(yy(i,j)-yy(i,j-1));
-        J{i-1,j-1}=[dksi_dx dksi_dy; deta_dx deta_dy];
+for i=2:nx
+    for j=2:ny
+        dksi_dx=(ksi(i+1,j)-ksi(i-1,j))/(xx(i+1,j)-xx(i-1,j));
+        dksi_dy=(ksi(i,j+1)-ksi(i,j-1))/(yy(i,j+1)-yy(i,j-1));
+        deta_dx=(eta(i+1,j)-eta(i-1,j))/(xx(i+1,j)-xx(i-1,j));
+        deta_dy=(eta(i,j+1)-eta(i,j-1))/(yy(i,j+1)-yy(i,j-1));
+        J{i-1,j-1}=[dksi_dy deta_dy; dksi_dx deta_dx];
         
-        dx_dksi=(xx(i,j)-xx(i-1,j))/(ksi(i,j)-ksi(i-1,j));
-        dy_dksi=(yy(i,j)-yy(i,j-1))/(ksi(i,j)-ksi(i,j-1));
-        dx_deta=(xx(i,j)-xx(i-1,j))/(eta(i,j)-eta(i-1,j));
-        dy_deta=(yy(i,j)-yy(i,j-1))/(eta(i,j)-eta(i,j-1));
-        Ji{i-1,j-1}=[dx_dksi dx_deta; dy_dksi dy_deta];
+%         dx_dksi=(xx(i+1,j)-xx(i-1,j))/(ksi(i+1,j)-ksi(i-1,j));
+%         dx_deta=(xx(i,j+1)-xx(i,j-1))/(eta(i,j+1)-eta(i,j-1));
+%         dy_dksi=(yy(i+1,j)-yy(i-1,j))/(ksi(i+1,j)-ksi(i-1,j));
+%         dy_deta=(yy(i,j+1)-yy(i,j-1))/(eta(i,j+1)-eta(i,j-1));
+%         J{i-1,j-1}=[dx_deta dy_deta; dx_dksi dy_dksi];
+
     end
 end
 fprintf('Jacobian cell-array %d x %d created\n',size(J,1),size(J,2));

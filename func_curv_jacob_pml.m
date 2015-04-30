@@ -22,7 +22,7 @@
 %yy - curvil y
 
 %To test:
-% [x,y, ksi,eta,J] = func_curv_jacob_pml(30,30,5,0,100, 0, 100,'-(2*pi*x/max(x)+0.25*pi)',10,10,true);
+% [x,y, ksi,eta,J] = func_curv_jacob_pml(30,30,5,0,100, 0, 100,'-(2*pi*x/max(x)+0.25*pi)',10,10, 0.1,true);
 %[curvil x, curvil y, cartes x, cartes y, J of curvil ---> cartes]= ...
 
 function [xx,yy,ksi,eta,J] = func_curv_jacob_pml(nx,ny,npml,xmin,xmax,ymin,ymax,argument,dxx,dyy,curvature,showornot)
