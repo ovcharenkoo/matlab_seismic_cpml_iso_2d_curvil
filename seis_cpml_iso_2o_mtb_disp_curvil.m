@@ -131,7 +131,15 @@
  NX =100;  %X
  NY =100;  %Y
  
+XMAX=1000.d0;
+XMIN=0.d0;
+YMAX=1000.d0;
+YMIN=0.d0;
+DELTAX = (XMAX-XMIN)/NX;	%[m]
+DELTAY = (YMAX-YMIN)/NY;
 
+DELTAXC=1.d0;
+DELTAYC=1.d0;
 %--------------------------------------------------------------------------
 %---------------------- FLAGS ---------------------------------------------
 % display information on the screen from time to time
@@ -148,7 +156,7 @@
     EXPLOSIVE_SOURCE=false;
     
 %Show source position on the graph?
-    SHOW_SOURCE_POSITION=true;
+    SHOW_SOURCE_POSITION=false;
 
 %Pause a little bit each iteration
    PAUSE_ON=false;
@@ -162,7 +170,7 @@
 %because video is being created by capturing of current frame
 %Matlab 2012 + required, saves video to a current folder
   MAKE_MOVIE_VX=false;
-  MAKE_MOVIE_VY=false;
+  MAKE_MOVIE_VY=true;
   
 %Apply flat Free surface
   FREE_SURFACE=false;
@@ -208,10 +216,6 @@
       disp('Error. It is necesary to have SAVE_VX_JPG=true.');
       MAKE_MOVIE_VX=false;
   end
-
- % size of a grid cell
- DELTAX = 10.d0;	%[m]
- DELTAY = DELTAX;
     
  %vectors for visualisation using imagesec
  nx_vec=1:NX*DELTAX;	%[m]
@@ -268,20 +272,20 @@
 
 % main arrays
 %displacements over X and Y
-  ux=zeros(NX,NY);
-  uy=zeros(NX,NY);
+  ux=zeros(NX+1,NY+1);
+  uy=zeros(NX+1,NY+1);
 % variables that save wavefield at two previous time steps
-  uxnm1=zeros(NX,NY);
-  uynm1=zeros(NX,NY);
-  uxnm2=zeros(NX,NY);
-  uynm2=zeros(NX,NY);
-  velx=zeros(NX,NY);
-  vely=zeros(NX,NY);
+  uxnm1=zeros(NX+1,NY+1);
+  uynm1=zeros(NX+1,NY+1);
+  uxnm2=zeros(NX+1,NY+1);
+  uynm2=zeros(NX+1,NY+1);
+  velx=zeros(NX+1,NY+1);
+  vely=zeros(NX+1,NY+1);
 
 %elastic parameters
-  lambda=zeros(NX,NY);
-  mu=zeros(NX,NY);
-  rho=zeros(NX,NY);
+  lambda=zeros(NX+1,NY+1);
+  mu=zeros(NX+1,NY+1);
+  rho=zeros(NX+1,NY+1);
 
 %   total_energy_kinetic=zeros(NSTEP);
 %   total_energy_potential=zeros(NSTEP);
@@ -294,26 +298,26 @@
 
 % arrays for the memory variables
 % could declare these arrays in PML only to save a lot of memory, but proof of concept only here
-  memory_dux_dxx=zeros(NX,NY);
-  memory_duy_dyy=zeros(NX,NY);
-  memory_dux_dxy=zeros(NX,NY);
-  memory_duy_dxy=zeros(NX,NY);  
-  memory_duy_dxx=zeros(NX,NY);
-  memory_dux_dyy=zeros(NX,NY);
+  memory_dux_dxx=zeros(NX+1,NY+1);
+  memory_duy_dyy=zeros(NX+1,NY+1);
+  memory_dux_dxy=zeros(NX+1,NY+1);
+  memory_duy_dxy=zeros(NX+1,NY+1);  
+  memory_duy_dxx=zeros(NX+1,NY+1);
+  memory_dux_dyy=zeros(NX+1,NY+1);
 
 
  % 1D arrays for the damping profiles
- d_x=zeros(NX,1);
- K_x=zeros(NX,1);
- alpha_x=zeros(NX,1);
- a_x=zeros(NX,1);
- b_x=zeros(NX,1);
+ d_x=zeros(NX+1,1);
+ K_x=zeros(NX+1,1);
+ alpha_x=zeros(NX+1,1);
+ a_x=zeros(NX+1,1);
+ b_x=zeros(NX+1,1);
 
- d_y=zeros(NY,1);
- K_y=zeros(NY,1);
- alpha_y=zeros(NY,1);
- a_y=zeros(NY,1);
- b_y=zeros(NY,1);
+ d_y=zeros(NY+1,1);
+ K_y=zeros(NY+1,1);
+ alpha_y=zeros(NY+1,1);
+ a_y=zeros(NY+1,1);
+ b_y=zeros(NY+1,1);
 
  % for receivers
  ix_rec=zeros(NREC,1);
@@ -388,7 +392,7 @@
   xoriginleft = thickness_PML_x;
   xoriginright = (NX-1)*DELTAX - thickness_PML_x;
 
-for i = 1:NX
+for i = 1:NX+1
     % abscissa of current grid point along the damping profile
     xval = DELTAX * double(i-1);
     %---------- left edge
@@ -428,7 +432,7 @@ for i = 1:NX
     if(abs(d_x(i)) > 1.d-6) 
         a_x(i) = d_x(i) * (b_x(i) - 1.d0) / (K_x(i) * (d_x(i) + K_x(i) * alpha_x(i)));
     end    
-  end
+end
 
 %--------------------------------------------------------------------------
 % damping in the Y direction
@@ -437,7 +441,7 @@ for i = 1:NX
   yoriginbottom = thickness_PML_y;
   yorigintop = (NY-1)*DELTAY - thickness_PML_y;
 
-  for j = 1:NY
+  for j = 1:NY+1
     % abscissa of current grid point along the damping profile
     yval = DELTAY * double(j-1);
     %---------- bottom edge
@@ -479,8 +483,19 @@ for i = 1:NX
 sphi='-(2*pi*x/max(x))'; %sting argument for curved interface  
 %Generate regular sparse mesh 
   
-[xx,yy, ksi, eta,J] = func_curv_jacob(NX,NY,0,NX*DELTAX, 0, NY*DELTAY,sphi,DELTAX,DELTAY, 0.2,false);
+[xx,yy, ksi, eta,J] = func_curv_jacob(NX,NY,XMIN,XMAX,YMIN,YMAX,sphi,DELTAXC,DELTAYC, 0.2,false);
 fprintf('func_curv_jacob finished\n\n');
+% [xx2,yy2, ksi2, eta2,J2] = func_curv_jacob(2*NX,2*NY,XMIN,XMAX,YMIN,YMAX,sphi,DELTAXC,DELTAYC, 0.2,false);
+% fprintf('func_curv_jacob finished\n\n');
+% 
+% Jd=cell(NX,NY);
+% for i=1:NX
+%     for j=1:NY
+%         tmp=J2{2*i,2*j};
+%         Jd{i,j}=tmp;
+%     end
+% end
+
 %   [xx,yy, ksi, eta,J] = func_curv_jacob_pml(NX,NY,NPOINTS_PML,0,NX*DELTAX, 0, NY*DELTAY,sphi,DELTAX,DELTAY, 0.1,false);
 %   fprintf('func_curv_jacob finished\n\n');
 %   [xx2,yy2, ksi2, eta2,J2] = func_curv_jacob_pml(2*NX,2*NY,2*NPOINTS_PML,0,NX*DELTAX, 0, NY*DELTAY,sphi,DELTAX,DELTAY, 0.1 ,false);
@@ -618,9 +633,6 @@ fprintf('func_curv_jacob finished\n\n');
   end
   set(gca,'YDir','normal');
   
-%   dx=DELTAX;
-%   dz=DELTAY;
-%   oper=create_oper_for_derivatives_from_taylor(1.d0,1.d0);
   value_dux_dx=ZERO;
   value_dux_dy=ZERO;
   value_duy_dx=ZERO;
@@ -634,8 +646,8 @@ fprintf('func_curv_jacob finished\n\n');
   for it = 1:NSTEP
     ux(:,:)=ZERO;
     uy(:,:)=ZERO;
-        for j = 2:NY-1
-            for i = 2:NX-1  
+        for j = 2:NY
+            for i = 2:NX 
               lambdav = lambda(i,j);
               muv =  mu(i,j);
               rhov=rho(i,j);
@@ -661,14 +673,14 @@ fprintf('func_curv_jacob finished\n\n');
               deta_dx=Jt(2,2);
 
               %Derivatives from 4th lecture Introduction to CFD
-              value_dux_dxx = (uxnm1(i-1,j) -2*uxnm1(i,j)+ uxnm1(i+1,j)) / (DELTAX^2);
-              value_duy_dxx = (uynm1(i-1,j) -2*uynm1(i,j)+ uynm1(i+1,j)) / (DELTAX^2);
+              value_dux_dxx = (uxnm1(i-1,j) -2*uxnm1(i,j)+ uxnm1(i+1,j)) / (DELTAXC^2);
+              value_duy_dxx = (uynm1(i-1,j) -2*uynm1(i,j)+ uynm1(i+1,j)) / (DELTAXC^2);
               
-              value_duy_dyy = (uynm1(i,j-1) -2*uynm1(i,j)+ uynm1(i,j+1)) / (DELTAY^2);
-              value_dux_dyy = (uxnm1(i,j-1) -2*uxnm1(i,j)+ uxnm1(i,j+1)) / (DELTAY^2);
+              value_duy_dyy = (uynm1(i,j-1) -2*uynm1(i,j)+ uynm1(i,j+1)) / (DELTAYC^2);
+              value_dux_dyy = (uxnm1(i,j-1) -2*uxnm1(i,j)+ uxnm1(i,j+1)) / (DELTAYC^2);
               
-              value_dux_dxy=(uxnm1(i+1,j+1)-uxnm1(i+1,j-1)-uxnm1(i-1,j+1)+uxnm1(i-1,j-1))/(4*DELTAX*DELTAY);
-              value_duy_dxy=(uynm1(i+1,j+1)-uynm1(i+1,j-1)-uynm1(i-1,j+1)+uynm1(i-1,j-1))/(4*DELTAX*DELTAY);
+              value_dux_dxy=(uxnm1(i+1,j+1)-uxnm1(i+1,j-1)-uxnm1(i-1,j+1)+uxnm1(i-1,j-1))/(4*DELTAXC*DELTAYC);
+              value_duy_dxy=(uynm1(i+1,j+1)-uynm1(i+1,j-1)-uynm1(i-1,j+1)+uynm1(i-1,j-1))/(4*DELTAXC*DELTAYC);
               
               Jacobiano=[dksi_dx deta_dx 0 0 0;...
                       dksi_dy deta_dy 0 0 0;...
@@ -745,16 +757,16 @@ fprintf('func_curv_jacob finished\n\n');
  
     % Dirichlet conditions (rigid boundaries) on the edges or at the bottom of the PML layers
     ux(1,:) = ZERO;
-    ux(NX,:) = ZERO;
+    ux(NX+1,:) = ZERO;
 
     ux(:,1) = ZERO;
-    ux(:,NY) = ZERO;
+    ux(:,NY+1) = ZERO;
 
     uy(1,:) = ZERO;
-    uy(NX,:) = ZERO;
+    uy(NX+1,:) = ZERO;
 
     uy(:,1) = ZERO;
-    uy(:,NY) = ZERO;
+    uy(:,NY+1) = ZERO;
 
     % store seismograms
     for irec = 1:NREC
@@ -827,7 +839,9 @@ fprintf('func_curv_jacob finished\n\n');
                 end
             end
             %velnorm(ISOURCE-1:ISOURCE+1,JSOURCE-1:JSOURCE+1)=ZERO;
-            imagesc(nx_vec,ny_vec,u');
+            %imagesc(nx_vec,ny_vec,u');
+            %pcolor(xx,yy,u); shading interp;
+            contour(xx,yy,u);
             title(['Step = ',num2str(it),' Time: ',num2str(single((it-1)*DELTAT)),' sec']); 
             xlabel('m');
             ylabel('m');

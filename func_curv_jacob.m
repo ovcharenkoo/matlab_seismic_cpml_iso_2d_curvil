@@ -14,6 +14,9 @@
 % dxx - x spacing for Cartesian grid
 % dyy - y spacing for Cartesian grid
 
+%Test:
+% [x,y, ksi,eta,J] = func_curv_jacob(30,30,0,100, 0, 100,'-(2*pi*x/max(x))',1,1, 0.1,true);
+
 function [xx,yy,ksi,eta,J] = func_curv_jacob(nx,ny,xmin,xmax,ymin,ymax,argument,dxx,dyy,curvature,showornot)
 %npml=10;
 
@@ -142,13 +145,13 @@ for i=2:nx
         dksi_dy=(ksi(i,j+1)-ksi(i,j-1))/(yy(i,j+1)-yy(i,j-1));
         deta_dx=(eta(i+1,j)-eta(i-1,j))/(xx(i+1,j)-xx(i-1,j));
         deta_dy=(eta(i,j+1)-eta(i,j-1))/(yy(i,j+1)-yy(i,j-1));
-        J{i-1,j-1}=[dksi_dy deta_dy; dksi_dx deta_dx];
+        J{i,j}=[dksi_dy deta_dy; dksi_dx deta_dx];
         
 %         dx_dksi=(xx(i+1,j)-xx(i-1,j))/(ksi(i+1,j)-ksi(i-1,j));
 %         dx_deta=(xx(i,j+1)-xx(i,j-1))/(eta(i,j+1)-eta(i,j-1));
 %         dy_dksi=(yy(i+1,j)-yy(i-1,j))/(ksi(i+1,j)-ksi(i-1,j));
 %         dy_deta=(yy(i,j+1)-yy(i,j-1))/(eta(i,j+1)-eta(i,j-1));
-%         J{i-1,j-1}=[dx_deta dy_deta; dx_dksi dy_dksi];
+%         J{i,j}=[dx_deta dy_deta; dx_dksi dy_dksi];
 
     end
 end
