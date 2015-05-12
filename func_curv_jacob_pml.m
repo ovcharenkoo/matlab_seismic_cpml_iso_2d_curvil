@@ -145,18 +145,23 @@ end
 % J=zeros(nx,ny);
 for i=2:nx
      for j=2:ny
+        dksi_dx=(ksi(i+1,j)-ksi(i-1,j))/(xx(i+1,j)-xx(i-1,j));
+        dksi_dy=(ksi(i,j+1)-ksi(i,j-1))/(yy(i,j+1)-yy(i,j-1));
+        deta_dx=(eta(i+1,j)-eta(i-1,j))/(xx(i+1,j)-xx(i-1,j));
+        deta_dy=(eta(i,j+1)-eta(i,j-1))/(yy(i,j+1)-yy(i,j-1));
+        J{i,j}=[dksi_dy deta_dy; dksi_dx deta_dx];
 %         dksi_dx=(ksi(i+1,j)-ksi(i-1,j))/(xx(i+1,j)-xx(i-1,j));
 %         dksi_dy=(ksi(i,j+1)-ksi(i,j-1))/(yy(i,j+1)-yy(i,j-1));
 %         deta_dx=(eta(i+1,j)-eta(i-1,j))/(xx(i+1,j)-xx(i-1,j));
 %         deta_dy=(eta(i,j+1)-eta(i,j-1))/(yy(i,j+1)-yy(i,j-1));
 %         J{i-1,j-1}=[dksi_dy deta_dy; dksi_dx deta_dx];
         
-        dx_dksi=(xx(i+1,j)-xx(i-1,j))/(ksi(i+1,j)-ksi(i-1,j));
-        dx_deta=(xx(i,j+1)-xx(i,j-1))/(eta(i,j+1)-eta(i,j-1));
-        dy_dksi=(yy(i+1,j)-yy(i-1,j))/(ksi(i+1,j)-ksi(i-1,j));
-        dy_deta=(yy(i,j+1)-yy(i,j-1))/(eta(i,j+1)-eta(i,j-1));
+%         dx_dksi=(xx(i+1,j)-xx(i-1,j))/(ksi(i+1,j)-ksi(i-1,j));
+%         dx_deta=(xx(i,j+1)-xx(i,j-1))/(eta(i,j+1)-eta(i,j-1));
+%         dy_dksi=(yy(i+1,j)-yy(i-1,j))/(ksi(i+1,j)-ksi(i-1,j));
+%         dy_deta=(yy(i,j+1)-yy(i,j-1))/(eta(i,j+1)-eta(i,j-1));
         
-         J{i-1,j-1}=[dx_deta dy_deta; dx_dksi dy_dksi];
+%          J{i-1,j-1}=[dx_deta dy_deta; dx_dksi dy_dksi];
 %         Ji{i-1,j-1}=[dksi_dx deta_dx; dksi_dy deta_dy];
 
 %         J(i-1,j-1) =dksi_dx*deta_dy-deta_dx*dksi_dy;

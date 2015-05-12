@@ -143,7 +143,7 @@ DELTAYC=1.d0;
 %--------------------------------------------------------------------------
 %---------------------- FLAGS ---------------------------------------------
 % display information on the screen from time to time
-  IT_DISPLAY = 10;
+  IT_DISPLAY = 20;
   
 % total number of time steps
  NSTEP = 500;
@@ -170,8 +170,7 @@ DELTAYC=1.d0;
 %because video is being created by capturing of current frame
 %Matlab 2012 + required, saves video to a current folder
   MAKE_MOVIE_VX=false;
-  MAKE_MOVIE_VY=true;
-  
+  MAKE_MOVIE_VY=false;
 %Apply flat Free surface
   FREE_SURFACE=false;
   %Position of flat horizontal free surface
@@ -250,10 +249,10 @@ DELTAYC=1.d0;
 
 % receivers
   NREC = 2;
-  xdeb = xsource - 100.d0;   % first receiver x in meters
-  ydeb = 2300.d0;            % first receiver y in meters
-  xfin = xsource;            % last receiver x in meters
-  yfin =  300.d0;           % last receiver y in meters
+  xdeb = XMAX/2;   % first receiver x in meters
+  ydeb = 0.95*YMAX;            % first receiver y in meters
+  xfin = XMAX-DELTAX*(NPOINTS_PML+10);            % last receiver x in meters
+  yfin = ysource;           % last receiver y in meters
 
 % value of PI
   PI = 3.141592653589793238462643d0;
@@ -298,13 +297,19 @@ DELTAYC=1.d0;
 
 % arrays for the memory variables
 % could declare these arrays in PML only to save a lot of memory, but proof of concept only here
-  memory_dux_dxx=zeros(NX+1,NY+1);
-  memory_duy_dyy=zeros(NX+1,NY+1);
-  memory_dux_dxy=zeros(NX+1,NY+1);
-  memory_duy_dxy=zeros(NX+1,NY+1);  
-  memory_duy_dxx=zeros(NX+1,NY+1);
-  memory_dux_dyy=zeros(NX+1,NY+1);
+  memory_duy_dy=zeros(NX+1,NY+1);
+  memory_dux_dx=zeros(NX+1,NY+1);  
+  memory_duy_dx=zeros(NX+1,NY+1);
+  memory_dux_dy=zeros(NX+1,NY+1);
 
+   %Sigmas
+ sigmaxx=zeros(NX+1,NY+1);
+ sigmaxy=zeros(NX+1,NY+1);
+ sigmayy=zeros(NX+1,NY+1);
+ memory_dsigmaxx_dx=zeros(NX+1,NY+1);
+ memory_dsigmaxy_dy=zeros(NX+1,NY+1);
+ memory_dsigmaxy_dx=zeros(NX+1,NY+1);
+ memory_dsigmayy_dy=zeros(NX+1,NY+1);
 
  % 1D arrays for the damping profiles
  d_x=zeros(NX+1,1);
@@ -483,9 +488,14 @@ end
 sphi='-(2*pi*x/max(x))'; %sting argument for curved interface  
 %Generate regular sparse mesh 
   
-[xx,yy, ksi, eta,J] = func_curv_jacob(NX,NY,XMIN,XMAX,YMIN,YMAX,sphi,DELTAXC,DELTAYC, 0.2,false);
+% [xx,yy, ksi, eta,J] = func_curv_jacob(NX,NY,XMIN,XMAX,YMIN,YMAX,sphi,DELTAXC,DELTAYC, 0.00001,false);
+% fprintf('func_curv_jacob finished\n\n');
+% [xx2,yy2, ksi2, eta2,J2] = func_curv_jacob(2*NX,2*NY,XMIN,XMAX,YMIN,YMAX,sphi,DELTAXC,DELTAYC, 0.00001,false);
+curvature=0.00001;
+%curvature=0.1;
+[xx,yy, ksi, eta,J] = func_curv_jacob_pml(NX,NY,NPOINTS_PML+10,XMIN,XMAX,YMIN,YMAX,sphi,DELTAXC,DELTAYC, curvature,false);
 fprintf('func_curv_jacob finished\n\n');
-% [xx2,yy2, ksi2, eta2,J2] = func_curv_jacob(2*NX,2*NY,XMIN,XMAX,YMIN,YMAX,sphi,DELTAXC,DELTAYC, 0.2,false);
+[xx2,yy2, ksi2, eta2,J2] = func_curv_jacob_pml(2*NX,2*NY,2*(NPOINTS_PML+10),XMIN,XMAX,YMIN,YMAX,sphi,DELTAXC,DELTAYC, curvature,false);
 % fprintf('func_curv_jacob finished\n\n');
 % 
 % Jd=cell(NX,NY);
@@ -606,6 +616,8 @@ fprintf('func_curv_jacob finished\n\n');
   memory_dux_dxy(:,:) = ZERO;
   memory_duy_dxx(:,:) = ZERO;
   memory_dux_dyy(:,:) = ZERO;
+  
+
 
 % initialize seismograms
   sisvx(:,:) = ZERO;
@@ -631,7 +643,7 @@ fprintf('func_curv_jacob finished\n\n');
   if RED_BLUE
       colormap(CMAP);
   end
-  set(gca,'YDir','normal');
+  %set(gca,'YDir','normal');
   
   value_dux_dx=ZERO;
   value_dux_dy=ZERO;
@@ -666,13 +678,19 @@ fprintf('func_curv_jacob finished\n\n');
 %               value_duy_dxx=UInm1y(4)/DELTAX^2.d0;
 %               value_duy_dyy=UInm1y(5)/DELTAY^2.d0;
 %               value_duy_dxy=UInm1y(6)/(4*DELTAX*DELTAY);
-              Jt=J{i,j};
+              Jt=J2{i+2,j+2};
               dksi_dy=Jt(1,1);
               deta_dy=Jt(1,2);
               dksi_dx=Jt(2,1);
               deta_dx=Jt(2,2);
 
               %Derivatives from 4th lecture Introduction to CFD
+              value_dux_dx=(uxnm1(i+1,j)-uxnm1(i-1,j))/(2.d0*DELTAXC);
+              value_dux_dy=(uxnm1(i,j+1)-uxnm1(i,j-1))/(2.d0*DELTAYC);
+              
+              value_duy_dx=(uynm1(i+1,j)-uynm1(i-1,j))/(2*DELTAXC);
+              value_duy_dy=(uynm1(i,j+1)-uynm1(i,j-1))/(2*DELTAYC);
+              
               value_dux_dxx = (uxnm1(i-1,j) -2*uxnm1(i,j)+ uxnm1(i+1,j)) / (DELTAXC^2);
               value_duy_dxx = (uynm1(i-1,j) -2*uynm1(i,j)+ uynm1(i+1,j)) / (DELTAXC^2);
               
@@ -690,41 +708,63 @@ fprintf('func_curv_jacob finished\n\n');
               
               UInm1x=Jacobiano*[value_dux_dx;value_dux_dy;value_dux_dxx;value_dux_dyy;value_dux_dxy];
               UInm1y=Jacobiano*[value_duy_dx;value_duy_dy;value_duy_dxx;value_duy_dyy;value_duy_dxy];
+              
+              value_dux_dx=UInm1x(1);
+              value_dux_dy=UInm1x(2);
               value_dux_dxx=UInm1x(3);
               value_dux_dyy=UInm1x(4);
               value_dux_dxy=UInm1x(5);
               
+              value_duy_dx=UInm1y(1);
+              value_duy_dy=UInm1y(2);
               value_duy_dxx=UInm1y(3);
               value_duy_dyy=UInm1y(4);
               value_duy_dxy=UInm1y(5);
               
-              memory_dux_dxx(i,j) = b_x(i) * memory_dux_dxx(i,j) + a_x(i) * value_dux_dxx;
-              memory_duy_dyy(i,j) = b_y(j) * memory_duy_dyy(i,j) + a_y(j) * value_duy_dyy;
-              value_dux_dxx = value_dux_dxx / K_x(i) + memory_dux_dxx(i,j);
-              value_duy_dyy = value_duy_dyy / K_y(j) + memory_duy_dyy(i,j);
-              
-              memory_duy_dxx(i,j) = b_x(i) * memory_duy_dxx(i,j) + a_x(i) * value_duy_dxx;
-              memory_dux_dyy(i,j) = b_y(j) * memory_dux_dyy(i,j) + a_y(j) * value_dux_dyy;
-              value_duy_dxx = value_duy_dxx / K_x(i) + memory_duy_dxx(i,j);
-              value_dux_dyy = value_dux_dyy / K_y(j) + memory_dux_dyy(i,j);
-              
-              memory_duy_dxy(i,j) = b_x(i) * memory_duy_dxy(i,j) + a_x(i) * value_duy_dxy;
-              memory_duy_dxy(i,j) = b_y(j) * memory_duy_dxy(i,j) + a_y(j) * value_duy_dxy;
-              value_duy_dxy = value_duy_dxy / K_x(i) + memory_duy_dxy(i,j);
-              value_duy_dxy = value_duy_dxy / K_y(j) + memory_duy_dxy(i,j);
-              
-              memory_dux_dxy(i,j) = b_x(i) * memory_dux_dxy(i,j) + a_x(i) * value_dux_dxy;
-              memory_dux_dxy(i,j) = b_y(j) * memory_dux_dxy(i,j) + a_y(j) * value_dux_dxy;
-              value_dux_dxy = value_dux_dxy / K_x(i) + memory_dux_dxy(i,j);
-              value_dux_dxy = value_dux_dxy / K_y(j) + memory_dux_dxy(i,j);
-                   
-              %Modelling Seismic Wave Propagation for Geophysical Imaging(Virieux, Etienne et al.)
+                            %Modelling Seismic Wave Propagation for Geophysical Imaging(Virieux, Etienne et al.)
+              ux(i,j) = 2*uxnm1(i,j)-uxnm2(i,j) + ...
+                 (lambda_plus_two_mu*value_dux_dxx + lambda_plus_mu*value_duy_dxy+muv*value_dux_dyy) * (DELTAT^2.d0)/rhov;
+
+              uy(i,j) = 2*uynm1(i,j)-uynm2(i,j) + ...
+                 (lambda_plus_two_mu*value_duy_dyy + lambda_plus_mu*value_dux_dxy+muv*value_duy_dxx) * (DELTAT^2.d0)/rhov;
+%               
+              if (i<(NPOINTS_PML+2) && i>2) || (i>(NX-NPOINTS_PML-2) && i<(NX)) || j<(NPOINTS_PML+2) || j>(NY-NPOINTS_PML-2)                                        
+                  memory_dux_dx(i,j) = b_x(i) * memory_dux_dx(i,j) + a_x(i) * value_dux_dx;
+                  memory_duy_dy(i,j) = b_y(j) * memory_duy_dy(i,j) + a_y(j) * value_duy_dy;
+                  value_dux_dx = value_dux_dx / K_x(i) + memory_dux_dx(i,j);
+                  value_duy_dy = value_duy_dy / K_y(j) + memory_duy_dy(i,j);
+
+                  memory_duy_dx(i,j) = b_x(i) * memory_duy_dx(i,j) + a_x(i) * value_duy_dx;
+                  memory_dux_dy(i,j) = b_y(j) * memory_dux_dy(i,j) + a_y(j) * value_dux_dy;
+                  value_duy_dx = value_duy_dx / K_x(i) + memory_duy_dx(i,j);
+                  value_dux_dy = value_dux_dy / K_y(j) + memory_dux_dy(i,j);            
+
+                  sigmaxx(i,j)=lambda_plus_two_mu*value_dux_dx+lambdav*value_duy_dy;
+                  sigmaxy(i,j)=muv*(value_dux_dy+value_duy_dx);
+                  sigmayy(i,j)=lambdav*value_dux_dx+lambda_plus_two_mu*value_duy_dy;
+
+                  value_dsigmaxx_dx=(sigmaxx(i+1,j)-sigmaxx(i-1,j))/(2.d0*DELTAXC);
+                  value_dsigmaxy_dx=(sigmaxy(i+1,j)-sigmaxy(i-1,j))/(2.d0*DELTAXC);
+                  value_dsigmaxy_dy=(sigmaxy(i,j+1)-sigmaxy(i,j-1))/(2.d0*DELTAYC);
+                  value_dsigmayy_dy=(sigmayy(i,j+1)-sigmayy(i,j-1))/(2.d0*DELTAYC);
+
+                  memory_dsigmaxx_dx(i,j) = b_x(i) * memory_dsigmaxx_dx(i,j) + a_x(i) * value_dsigmaxx_dx;
+                  memory_dsigmaxy_dx(i,j) = b_x(i) * memory_dsigmaxy_dx(i,j) + a_x(i) * value_dsigmaxy_dx;
+                  value_dsigmaxx_dx = value_dsigmaxx_dx / K_x(i) + memory_dsigmaxx_dx(i,j);
+                  value_dsigmaxy_dx = value_dsigmaxy_dx / K_x(i) + memory_dsigmaxy_dx(i,j);
+
+                  memory_dsigmayy_dy(i,j) = b_y(j) * memory_dsigmayy_dy(i,j) + a_y(j) * value_dsigmayy_dy;
+                  memory_dsigmaxy_dy(i,j) = b_y(j) * memory_dsigmaxy_dy(i,j) + a_y(j) * value_dsigmaxy_dy;
+                  value_dsigmayy_dy = value_dsigmayy_dy / K_y(j) + memory_dsigmayy_dy(i,j);
+                  value_dsigmaxy_dy = value_dsigmaxy_dy / K_y(j) + memory_dsigmaxy_dy(i,j);    
+                  
                   ux(i,j) = 2*uxnm1(i,j)-uxnm2(i,j) + ...
-                     (lambda_plus_two_mu*value_dux_dxx + lambda_plus_mu*value_duy_dxy+muv*value_dux_dyy) * (DELTAT^2.d0)/rhov;
+                     (value_dsigmaxx_dx + value_dsigmaxy_dy) * (DELTAT^2.d0)/rhov;
 
                   uy(i,j) = 2*uynm1(i,j)-uynm2(i,j) + ...
-                     (lambda_plus_two_mu*value_duy_dyy + lambda_plus_mu*value_dux_dxy+muv*value_duy_dxx) * (DELTAT^2.d0)/rhov;
- 
+                     (value_dsigmaxy_dx + value_dsigmayy_dy) * (DELTAT^2.d0)/rhov;
+              end
+                    
                if VEL_NORM
                 velx(i,j)=(ux(i,j)-uxnm2(i,j))/(2*DELTAT);
                 vely(i,j)=(uy(i,j)-uynm2(i,j))/(2*DELTAT);
@@ -757,16 +797,16 @@ fprintf('func_curv_jacob finished\n\n');
  
     % Dirichlet conditions (rigid boundaries) on the edges or at the bottom of the PML layers
     ux(1,:) = ZERO;
-    ux(NX+1,:) = ZERO;
+    ux(NX:NX+1,:) = ZERO;
 
     ux(:,1) = ZERO;
-    ux(:,NY+1) = ZERO;
+    ux(:,NY:NY+1) = ZERO;
 
     uy(1,:) = ZERO;
-    uy(NX+1,:) = ZERO;
+    uy(NX:NX+1,:) = ZERO;
 
     uy(:,1) = ZERO;
-    uy(:,NY+1) = ZERO;
+    uy(:,NY:NY+1) = ZERO;
 
     % store seismograms
     for irec = 1:NREC
@@ -840,8 +880,15 @@ fprintf('func_curv_jacob finished\n\n');
             end
             %velnorm(ISOURCE-1:ISOURCE+1,JSOURCE-1:JSOURCE+1)=ZERO;
             %imagesc(nx_vec,ny_vec,u');
-            %pcolor(xx,yy,u); shading interp;
-            contour(xx,yy,u);
+            
+          %---------------------------------------------------------------------  
+            %uncoment to see colorful plot
+            pcolor(xx,yy,u); shading interp;
+            
+            %uncoment to see only contours
+            %contour(xx,yy,u);
+          %---------------------------------------------------------------------
+          
             title(['Step = ',num2str(it),' Time: ',num2str(single((it-1)*DELTAT)),' sec']); 
             xlabel('m');
             ylabel('m');
